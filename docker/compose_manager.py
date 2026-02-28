@@ -457,17 +457,6 @@ def status(config: dict) -> dict:
     }
 
 
-def _check_server_process(container_name: str, process_patterns: list) -> tuple:
-    """docker top으로 해당 컨테이너 내부 프로세스만 확인 (인스턴스 격리)
-
-    WSL2/비-WSL2 모두 `docker top <container>` 사용.
-    _docker_cli()가 WSL2에서는 자동으로 `wsl -u root -- /opt/.../docker` prefix를 붙임.
-    
-    Returns: (running: bool, matched_pattern: str | None)
-    """
-    return _check_docker_top_process(container_name, process_patterns)
-
-
 def _check_docker_top_process(container_name: str, process_patterns: list) -> tuple:
     """docker top으로 서버 프로세스 존재 확인 (컨테이너 내부만 검사)"""
     docker = _docker_cli()
@@ -484,25 +473,6 @@ def _check_docker_top_process(container_name: str, process_patterns: list) -> tu
             if pattern.lower() in line_lower:
                 return True, pattern
 
-    return False, None
-
-
-def _check_wsl_process(process_patterns: list) -> tuple:
-    """(레거시 폴백) WSL2 전역 프로세스 검색 — 인스턴스 격리 없음.
-    
-    container_name이 없는 경우에만 사용. 가능하면 _check_docker_top_process를 사용.
-    Returns: (running: bool, matched_pattern: str | None)
-    """
-    cmd = ["wsl", "-u", "root", "--", "ps", "-eo", "args", "--no-headers"]
-    success, stdout, stderr = _run_cmd(cmd, timeout=10)
-    if not success:
-        return False, None
-
-    for line in stdout.splitlines():
-        line_lower = line.strip().lower()
-        for pattern in process_patterns:
-            if pattern.lower() in line_lower:
-                return True, pattern
     return False, None
 
 
