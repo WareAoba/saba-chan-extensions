@@ -5,7 +5,9 @@
   "description": "Docker 컨테이너를 사용한 게임 서버 격리 실행",
   "author": "saba-chan",
   "min_app_version": "0.1.0",
-  "dependencies": [],
+  "dependencies": {
+    "steamcmd": ">=0.1.0"
+  },
 
   "python_modules": {
     "docker_engine": "docker_engine.py",
@@ -77,7 +79,7 @@
   },
 
   "gui": {
-    "builtin": true,
+    "bundle": "gui/dist/docker.umd.js",
     "slots": {
       "ServerCard.badge": "DockerBadge",
       "ServerCard.headerGauge": "DockerMiniGauge",

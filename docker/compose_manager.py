@@ -807,7 +807,7 @@ def provision(config: dict) -> dict:
             try:
                 # steamcmd.py의 _plugin_install 함수 호출
                 ext_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                steamcmd_path = os.path.join(ext_dir, "steamcmd.py")
+                steamcmd_path = os.path.join(ext_dir, "steamcmd", "steamcmd.py")
                 import importlib.util
                 spec = importlib.util.spec_from_file_location("steamcmd", steamcmd_path)
                 if spec and spec.loader:

@@ -1,10 +1,10 @@
 {
   "id": "music",
   "name": "Music Bot",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Discord 음성 채널 음악 재생 (yt-dlp + ffmpeg)",
   "author": "saba-chan",
-  "min_app_version": "0.2.0",
+  "min_app_version": "0.1.0",
   "dependencies": [],
 
   "python_modules": {
