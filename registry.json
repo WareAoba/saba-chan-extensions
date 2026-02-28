@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-02-28T15:08:50.260529+00:00",
+  "extensions": {
+    "docker": {
+      "name": "Docker Isolation",
+      "version": "0.1.0",
+      "description": "Docker 컨테이너를 사용한 게임 서버 격리 실행",
+      "author": "saba-chan",
+      "min_app_version": "0.1.0",
+      "dependencies": [],
+      "asset": "extension-docker.zip",
+      "sha256": "c70367bddd270e52ebf01adfd4b57a85bea6d40bbf1510f0362230cc67cc9f92",
+      "install_dir": "extensions/docker",
+      "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-docker.zip",
+      "has_gui": true,
+      "has_i18n": true
+    },
+    "music": {
+      "name": "Music Bot",
+      "version": "1.0.0",
+      "description": "Discord 음성 채널 음악 재생 (yt-dlp + ffmpeg)",
+      "author": "saba-chan",
+      "min_app_version": "0.2.0",
+      "dependencies": [],
+      "asset": "extension-music.zip",
+      "sha256": "0a52e18c60221833c4849e1db02f385d7d00bcb68d00338adb4b266b1cec7a74",
+      "install_dir": "extensions/music",
+      "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-music.zip",
+      "has_gui": false,
+      "has_i18n": false
+    },
+    "steamcmd": {
+      "name": "SteamCMD",
+      "version": "0.1.0",
+      "description": "SteamCMD를 사용한 게임 서버 설치 및 업데이트 자동화",
+      "author": "saba-chan",
+      "min_app_version": "0.1.0",
+      "dependencies": [],
+      "asset": "extension-steamcmd.zip",
+      "sha256": "f0c88ae7b66938c015acc0ba780a941e1f634ebddb0ead5d89689575203bc3a1",
+      "install_dir": "extensions/steamcmd",
+      "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-steamcmd.zip",
+      "has_gui": false,
+      "has_i18n": false
+    },
+    "ue4-ini": {
+      "name": "UE4 INI Parser",
+      "version": "0.1.0",
+      "description": "Unreal Engine 4 INI 파일의 OptionSettings 파싱 및 기록",
+      "author": "saba-chan",
+      "min_app_version": "0.1.0",
+      "dependencies": [],
+      "asset": "extension-ue4-ini.zip",
+      "sha256": "9c4d98619cd92be3d6ca50626132a32f7534d50e57a5b39ad904424eca66877a",
+      "install_dir": "extensions/ue4-ini",
+      "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-ue4-ini.zip",
+      "has_gui": false,
+      "has_i18n": false
+    }
+  }
+}
