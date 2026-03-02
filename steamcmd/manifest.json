@@ -21,6 +21,11 @@
       "module": "steamcmd",
       "function": "install",
       "condition": "instance.ext_data.install_method_steamcmd"
+    },
+    "server.check_update": {
+      "module": "steamcmd",
+      "function": "check_update",
+      "condition": "instance.ext_data.install_method_steamcmd"
     }
   },
 

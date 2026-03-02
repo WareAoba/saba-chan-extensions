@@ -4,11 +4,11 @@ saba-chan-extensions: Build & Release Script
 ============================================
 
 익스텐션 디렉토리를 스캔하여 manifest.json을 파싱하고,
-registry.json을 생성한 뒤 각 익스텐션을 zip으로 압축합니다.
+manifest.json을 생성한 뒤 각 익스텐션을 zip으로 압축합니다.
 
 출력:
   dist/
-    registry.json          — 본체가 참조하는 익스텐션 레지스트리
+    manifest.json          — 본체가 참조하는 익스텐션 매니페스트
     extension-{id}.zip     — 각 익스텐션의 배포용 압축 파일
     RELEASE_BODY.md        — GitHub Release 본문
     summary_table.md       — Step Summary용 테이블 조각
@@ -147,11 +147,11 @@ def create_extension_zip(ext_dir: Path, output_path: Path) -> tuple[str, int, in
     return sha256, file_count, zip_size
 
 
-# ── 레지스트리 ────────────────────────────────────────────
+# ── 매니페스트 ────────────────────────────────────────────
 
-def load_previous_registry() -> dict | None:
-    """이전 릴리즈의 registry.json 로드 (환경변수 PREV_REGISTRY 경로)"""
-    prev_path = os.environ.get("PREV_REGISTRY", "")
+def load_previous_manifest() -> dict | None:
+    """이전 릴리즈의 manifest.json 로드 (환경변수 PREV_MANIFEST 경로)"""
+    prev_path = os.environ.get("PREV_MANIFEST", "")
     if prev_path:
         p = Path(prev_path)
         if p.exists():
@@ -164,7 +164,7 @@ def detect_changes(
     current: dict[str, dict],
     previous: dict | None,
 ) -> list[str]:
-    """현재 익스텐션 vs 이전 레지스트리 비교 → 변경 사항 목록"""
+    """현재 익스텐션 vs 이전 매니페스트 비교 → 변경 사항 목록"""
     changes: list[str] = []
 
     if previous is None:
@@ -225,10 +225,10 @@ def build_release_body(
     # 사용법 안내
     lines.append("\n## 🔧 Usage\n")
     lines.append("```")
-    lines.append("# registry.json을 다운로드하여 익스텐션 버전 확인")
+    lines.append("# manifest.json을 다운로드하여 익스텐션 버전 확인")
     lines.append(
         f"gh release download --repo {GITHUB_REPO} "
-        "--pattern 'registry.json'"
+        "--pattern 'manifest.json'"
     )
     lines.append("")
     lines.append("# 특정 익스텐션만 다운로드")
@@ -262,8 +262,8 @@ def main() -> None:
     for e in extensions:
         print(f"   └─ {e.name}/")
 
-    # ── 2. 파싱 + 압축 + 레지스트리 데이터 수집 ──────
-    registry_extensions: dict[str, dict] = {}
+    # ── 2. 파싱 + 압축 + 매니페스트 데이터 수집 ──────
+    manifest_extensions: dict[str, dict] = {}
     summary_rows: list[str] = []
 
     for ext_dir in extensions:
@@ -281,7 +281,7 @@ def main() -> None:
         print(f"   📦 {asset_name}  ({file_count} files, {zip_size:,} bytes)")
         print(f"   🔒 SHA256: {sha256[:16]}...")
 
-        registry_extensions[ext_id] = {
+        manifest_extensions[ext_id] = {
             "name": meta["name"],
             "version": meta["version"],
             "description": meta["description"],
@@ -298,24 +298,24 @@ def main() -> None:
 
         summary_rows.append(f"| **{meta['name']}** | `v{meta['version']}` |")
 
-    # ── 3. registry.json 생성 ─────────────────────────
+    # ── 3. manifest.json 생성 ─────────────────────
     now = datetime.now(timezone.utc)
     generated_at = now.isoformat()
 
-    registry = {
+    manifest = {
         "schema_version": 1,
         "generated_at": generated_at,
-        "extensions": registry_extensions,
+        "extensions": manifest_extensions,
     }
 
-    registry_path = DIST_DIR / "registry.json"
-    with open(registry_path, "w", encoding="utf-8") as f:
-        json.dump(registry, f, indent=2, ensure_ascii=False)
-    print(f"\n📋 registry.json 생성 완료")
+    manifest_path = DIST_DIR / "manifest.json"
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2, ensure_ascii=False)
+    print(f"\n\ud83d\udccb manifest.json \uc0dd\uc131 \uc644\ub8cc")
 
     # ── 4. 변경 사항 감지 ─────────────────────────────
-    prev_registry = load_previous_registry()
-    changes = detect_changes(registry_extensions, prev_registry)
+    prev_manifest = load_previous_manifest()
+    changes = detect_changes(manifest_extensions, prev_manifest)
     force = os.environ.get("FORCE_RELEASE", "false").lower() == "true"
 
     should_release = len(changes) > 0 or force
@@ -334,12 +334,12 @@ def main() -> None:
 
     # 릴리즈 이름: 각 익스텐션 버전 요약
     version_parts = [
-        f"{m['name']} v{m['version']}" for m in registry_extensions.values()
+        f"{m['name']} v{m['version']}" for m in manifest_extensions.values()
     ]
     release_name = f"Extensions — {', '.join(version_parts)}"
 
     # 릴리즈 본문
-    release_body = build_release_body(registry_extensions, changes, generated_at)
+    release_body = build_release_body(manifest_extensions, changes, generated_at)
     body_path = DIST_DIR / "RELEASE_BODY.md"
     with open(body_path, "w", encoding="utf-8") as f:
         f.write(release_body)
@@ -353,12 +353,12 @@ def main() -> None:
     set_output("should_release", "true")
     set_output("tag", tag)
     set_output("release_name", release_name)
-    set_output("extension_count", str(len(registry_extensions)))
+    set_output("extension_count", str(len(manifest_extensions)))
 
     print(f"\n{'=' * 60}")
     print(f"  ✅ 빌드 완료!")
     print(f"  🏷️  태그: {tag}")
-    print(f"  📦 익스텐션: {len(registry_extensions)}개")
+    print(f"  📦 익스텐션: {len(manifest_extensions)}개")
     print(f"  📝 변경: {len(changes)}건")
     print(f"{'=' * 60}")
 

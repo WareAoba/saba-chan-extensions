@@ -777,7 +777,7 @@ def provision(config: dict) -> dict:
         return {
             "handled": True,
             "success": False,
-            "error": f"Docker를 사용할 수 없습니다: {engine_result.get('message', 'unknown')}",
+            "error": f"Docker is unavailable: {engine_result.get('message', 'unknown')}",
         }
 
     # WSL2 모드 설정
@@ -813,18 +813,28 @@ def provision(config: dict) -> dict:
                 if spec and spec.loader:
                     steamcmd = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(steamcmd)
-                    result = steamcmd._plugin_install(steamcmd_config)
+                    # steamcmd의 _progress를 패치하여 step 메타데이터를 유지하고
+                    # percent를 40-66% 범위로 매핑 (전체 파이프라인 내 비율)
+                    _orig_steamcmd_progress = steamcmd._progress
+                    def _remapped_progress(pct, msg=""):
+                        remapped = 40 + int(pct * 26 / 100) if pct is not None else 40
+                        _progress(remapped, msg, step=1, total=3, label="steamcmd")
+                    steamcmd._progress = _remapped_progress
+                    try:
+                        result = steamcmd._plugin_install(steamcmd_config)
+                    finally:
+                        steamcmd._progress = _orig_steamcmd_progress
                     if not result.get("success", False):
                         return {
                             "handled": True,
                             "success": False,
-                            "error": f"SteamCMD 설치 실패: {result.get('error', result.get('message', 'unknown'))}",
+                            "error": f"SteamCMD installation failed: {result.get('error', result.get('message', 'unknown'))}",
                         }
             except Exception as e:
                 return {
                     "handled": True,
                     "success": False,
-                    "error": f"SteamCMD 실행 실패: {e}",
+                    "error": f"SteamCMD execution failed: {e}",
                 }
 
     elif install_method == "download":
@@ -840,7 +850,7 @@ def provision(config: dict) -> dict:
                 return {
                     "handled": True,
                     "success": False,
-                    "error": f"모듈 lifecycle을 찾을 수 없습니다: {module_name}",
+                    "error": f"Module lifecycle not found: {module_name}",
                 }
 
             import importlib.util as _ilu2
@@ -872,7 +882,7 @@ def provision(config: dict) -> dict:
                 return {
                     "handled": True,
                     "success": False,
-                    "error": f"서버 최신 버전을 조회할 수 없습니다 ({module_name})",
+                    "error": f"Could not retrieve the latest server version ({module_name})",
                 }
 
             _progress(42, f"Downloading v{version}...", step=1, total=3, label="download")
@@ -887,7 +897,7 @@ def provision(config: dict) -> dict:
                 return {
                     "handled": True,
                     "success": False,
-                    "error": f"서버 설치 실패: {install_result.get('message', 'unknown')}",
+                    "error": f"Server installation failed: {install_result.get('message', 'unknown')}",
                 }
 
             # install_result의 java_major_version을 compose 컨텍스트용으로 보존
@@ -901,7 +911,7 @@ def provision(config: dict) -> dict:
             return {
                 "handled": True,
                 "success": False,
-                "error": f"서버 다운로드 실패: {e}",
+                "error": f"Server download failed: {e}",
             }
 
     _progress(66, "Server files ready", step=1, total=3, label="server_files")
@@ -914,7 +924,7 @@ def provision(config: dict) -> dict:
         return {
             "handled": True,
             "success": False,
-            "error": f"모듈에 컨테이너 이미지 설정이 없습니다 (module_install keys: {list(module_config.keys())})",
+            "error": f"No container image configured in the module (module_install keys: {list(module_config.keys())})",
         }
 
     instance_data = config.get("instance", config)
@@ -937,7 +947,7 @@ def provision(config: dict) -> dict:
     return {
         "handled": True,
         "success": True,
-        "message": "Docker 프로비저닝 완료: docker-compose.yml 생성됨",
+        "message": "Docker provisioning complete: docker-compose.yml generated",
     }
 
 

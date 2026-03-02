@@ -1,0 +1,12 @@
+{
+  "ffmpeg": {
+    "available": true,
+    "path": "C:\\Users\\jace5\\AppData\\Roaming\\Python\\Python310\\site-packages\\imageio_ffmpeg\\binaries\\ffmpeg-win-x86_64-v7.1.exe",
+    "version": "ffmpeg version 7.1-essentials_build-www.gyan.dev Copyright (c) 2000-2024 the FFmpeg developers"
+  },
+  "yt_dlp": {
+    "available": true,
+    "path": "C:\\Users\\jace5\\AppData\\Roaming\\Python\\Python310\\Scripts\\yt-dlp.exe",
+    "version": "2026.02.04"
+  }
+}
