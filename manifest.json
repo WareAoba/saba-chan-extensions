@@ -55,7 +55,7 @@
       "dependencies": [],
       "asset": "extension-ue4-ini.zip",
       "sha256": "0ea0783cb779217f695e5df01942a7281a54bfbd4d0a3aa47eb27fdc8523a35a",
-      "install_dir": "extensions/ue4-ini",
+      "install_dir": "extensions/ue4_ini",
       "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-ue4-ini.zip",
       "has_gui": false,
       "has_i18n": false
