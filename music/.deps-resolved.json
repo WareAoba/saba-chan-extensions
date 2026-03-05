@@ -1,12 +1,21 @@
 {
+  "npm_packages": {
+    "available": true,
+    "installed": true
+  },
   "ffmpeg": {
     "available": true,
-    "path": "C:\\Users\\jace5\\AppData\\Roaming\\Python\\Python310\\site-packages\\imageio_ffmpeg\\binaries\\ffmpeg-win-x86_64-v7.1.exe",
-    "version": "ffmpeg version 7.1-essentials_build-www.gyan.dev Copyright (c) 2000-2024 the FFmpeg developers"
+    "path": "C:\\Users\\jace5\\AppData\\Local\\Microsoft\\WinGet\\Links\\ffmpeg.EXE",
+    "version": "ffmpeg version 8.0.1-full_build-www.gyan.dev Copyright (c) 2000-2025 the FFmpeg developers"
   },
   "yt_dlp": {
     "available": true,
-    "path": "C:\\Users\\jace5\\AppData\\Roaming\\Python\\Python310\\Scripts\\yt-dlp.exe",
-    "version": "2026.02.04"
+    "path": "C:\\Git\\saba-chan\\.venv\\Scripts\\yt-dlp.exe",
+    "version": "2026.03.03"
+  },
+  "opus": {
+    "available": true,
+    "library": "opusscript (Node.js fallback)",
+    "note": "System opus not found — Node.js opusscript/wasm should work"
   }
 }

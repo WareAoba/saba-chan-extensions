@@ -1,27 +1,21 @@
-"""Music extension — 바이너리 의존성 자동 설치 & 경로 관리.
+"""Music extension — dependency checker & installer.
 
-사바쨩 익스텐션 시스템에서 음악 봇에 필요한 **바이너리/외부 도구**를
-pip 으로 자동 설치하고, 설치 경로를 .deps-resolved.json 에 기록합니다.
+사바쨩 익스텐션 시스템에서 음악 봇에 필요한 외부 의존성을 검증하고,
+Node.js npm 패키지가 미설치일 경우 자동 설치를 시도합니다.
 daemon.startup 훅으로 실행됩니다.
 
 의존성 구조:
-  [Python pip — 이 파일이 관리]
-    - imageio-ffmpeg : ffmpeg 바이너리 (pip 패키지에 포함)
-    - yt-dlp         : YouTube 다운로더
-
-  [Node.js npm — discord_bot/package.json 에서 관리]
-    - @discordjs/voice, opusscript, play-dl, tweetnacl
-    → Node.js 순수 JS 패키지는 이 파일이 관리하지 않습니다.
-
-  [출력]
-    extensions/music/.deps-resolved.json
-    → music.js 가 시작 시 읽어 바이너리 경로를 설정합니다.
+  extensions/music/package.json   — npm 의존성 정의 (@discordjs/voice 등)
+  extensions/music/node_modules/  — npm install 결과물
+  시스템 PATH                     — ffmpeg, yt-dlp
 
 실제 음악 재생 로직은 discord_bot/extensions/music.js (Node.js) 에 있습니다.
 """
 
+import ctypes
 import json
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -32,37 +26,35 @@ logger = logging.getLogger("saba.ext.music")
 # 이 파일이 위치한 extensions/music/ 디렉토리
 _EXT_DIR = Path(__file__).resolve().parent
 
-# pip 으로 설치할 패키지 목록
-_PIP_PACKAGES = {
-    "ffmpeg": "imageio-ffmpeg",
-    "yt_dlp": "yt-dlp",
-}
-
 
 def check_dependencies(**_kwargs):
-    """daemon.startup hook — ffmpeg / yt-dlp 자동 설치 & 경로 기록.
+    """daemon.startup hook — npm 패키지 + ffmpeg / yt-dlp / opus 의존성 검사.
 
-    pip 으로 바이너리 의존성을 설치하고 경로를
-    ``.deps-resolved.json`` 에 기록합니다.
-    music.js 가 이 파일을 읽어 바이너리 경로를 설정합니다.
+    npm 의존성이 미설치이면 자동으로 ``npm install`` 을 시도합니다.
 
     Returns:
         dict: 검사 결과. ``status`` 가 ``"ready"`` 이면 모든 의존성 확인됨.
     """
+    # 1. Node.js npm 의존성 확인 & 자동 설치
+    npm_result = _ensure_npm_dependencies()
+
+    # 2. 시스템 의존성 확인
     results = {
-        "ffmpeg": _ensure_ffmpeg(),
-        "yt_dlp": _ensure_yt_dlp(),
+        "npm_packages": npm_result,
+        "ffmpeg": _check_ffmpeg(),
+        "yt_dlp": _check_yt_dlp(),
+        "opus": _check_opus(),
     }
 
     all_ok = all(r["available"] for r in results.values())
 
     if all_ok:
-        logger.info("Music binary dependencies OK: ffmpeg, yt-dlp all available")
+        logger.info("Music dependencies OK: npm packages, ffmpeg, yt-dlp, opus all available")
     else:
         missing = [k for k, v in results.items() if not v["available"]]
-        logger.warning("Music binary dependencies missing: %s", ", ".join(missing))
+        logger.warning("Music dependencies missing: %s", ", ".join(missing))
 
-    # .deps-resolved.json 에 경로 기록 → music.js 가 읽어감
+    # 3. 결과를 .deps-resolved.json 에 기록하여 Node.js 봇이 읽을 수 있게 한다
     _write_deps_resolved(results)
 
     return {
@@ -72,170 +64,185 @@ def check_dependencies(**_kwargs):
 
 
 # ──────────────────────────────────────────────────────────────
-#  pip 설치 헬퍼
+#  결과 영속화 (.deps-resolved.json)
 # ──────────────────────────────────────────────────────────────
 
 
-def _pip_install(package: str) -> bool:
-    """pip 으로 패키지를 설치합니다. 이미 설치돼 있으면 skip."""
+def _write_deps_resolved(results: dict):
+    """의존성 검사 결과를 .deps-resolved.json 에 기록.
+
+    Node.js 봇(music.js)이 이 파일을 읽어 ffmpeg/yt-dlp 실행 경로를 결정합니다.
+    기록 위치:
+      1. _EXT_DIR (이 스크립트가 위치한 디렉토리, Rust daemon이 호출할 때)
+      2. SABA_EXTENSIONS_DIR/music/ (환경변수가 설정된 경우, 프로덕션)
+    """
+    targets = [_EXT_DIR / ".deps-resolved.json"]
+
+    # SABA_EXTENSIONS_DIR 이 설정되어 있고 _EXT_DIR 과 다르면 추가로 기록
+    saba_ext = os.environ.get("SABA_EXTENSIONS_DIR")
+    if saba_ext:
+        alt = Path(saba_ext) / "music" / ".deps-resolved.json"
+        if alt.resolve() != targets[0].resolve():
+            targets.append(alt)
+
+    payload = json.dumps(results, indent=2, ensure_ascii=False)
+    for out_path in targets:
+        try:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(payload, encoding="utf-8")
+            logger.info("Wrote dependency info to %s", out_path)
+        except Exception as exc:
+            logger.warning("Failed to write %s: %s", out_path, exc)
+
+
+# ──────────────────────────────────────────────────────────────
+#  npm 의존성 관리
+# ──────────────────────────────────────────────────────────────
+
+
+def _ensure_npm_dependencies():
+    """extensions/music/node_modules 확인 & 필요 시 npm install 실행.
+
+    package.json은 이미 extensions/music/ 에 존재한다고 가정합니다.
+    """
+    node_modules = _EXT_DIR / "node_modules"
+    package_json = _EXT_DIR / "package.json"
+
+    if not package_json.exists():
+        return {
+            "available": False,
+            "error": "package.json not found in extensions/music/",
+        }
+
+    # 핵심 패키지 존재 여부로 설치 상태 판단
+    voice_marker = node_modules / "@discordjs" / "voice" / "package.json"
+    if voice_marker.exists():
+        return {"available": True, "installed": True}
+
+    # 미설치 → npm install 시도
+    logger.info("Music npm dependencies not found, running npm install...")
+    npm_cmd = shutil.which("npm")
+    if not npm_cmd:
+        return {
+            "available": False,
+            "error": "npm not found in PATH — cannot auto-install music dependencies",
+        }
+
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--upgrade", "--quiet", package],
+            [npm_cmd, "install", "--omit=dev", "--no-fund", "--no-audit"],
+            cwd=str(_EXT_DIR),
             capture_output=True,
             text=True,
             timeout=120,
         )
         if result.returncode == 0:
-            logger.info("pip install %s — success", package)
-            return True
+            logger.info("Music npm dependencies installed successfully")
+            return {"available": True, "installed": True, "auto_installed": True}
         else:
-            stderr = (result.stderr or "").strip()[:500]
-            logger.error("pip install %s failed (exit %d): %s", package, result.returncode, stderr)
-            return False
+            stderr = result.stderr.strip()[:500] if result.stderr else ""
+            logger.error("npm install failed (exit %d): %s", result.returncode, stderr)
+            return {
+                "available": False,
+                "error": f"npm install failed (exit {result.returncode})",
+                "stderr": stderr,
+            }
     except subprocess.TimeoutExpired:
-        logger.error("pip install %s timed out (120s)", package)
-        return False
+        logger.error("npm install timed out (120s)")
+        return {"available": False, "error": "npm install timed out"}
     except Exception as exc:
-        logger.error("pip install %s error: %s", package, exc)
-        return False
+        logger.error("npm install error: %s", exc)
+        return {"available": False, "error": str(exc)}
 
 
 # ──────────────────────────────────────────────────────────────
-#  FFmpeg — imageio-ffmpeg (pip 패키지에 바이너리 포함)
+#  개별 시스템 의존성 검사
 # ──────────────────────────────────────────────────────────────
 
 
-def _ensure_ffmpeg() -> dict:
-    """ffmpeg 확인 → 없으면 imageio-ffmpeg 설치 → 경로 반환."""
+def _check_ffmpeg():
+    """ffmpeg 사용 가능 여부 확인."""
+    path = shutil.which("ffmpeg")
+    if path:
+        try:
+            result = subprocess.run(
+                [path, "-version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            version_line = (
+                result.stdout.split("\n")[0] if result.stdout else "unknown"
+            )
+            return {"available": True, "path": path, "version": version_line}
+        except Exception as exc:
+            return {"available": False, "error": str(exc)}
 
-    # 1. imageio-ffmpeg 가 이미 설치돼 있는지 확인
-    ffmpeg_path = _get_imageio_ffmpeg_path()
-    if ffmpeg_path:
-        return _ffmpeg_result(ffmpeg_path)
-
-    # 2. 시스템 PATH 에서 찾기
-    system_ffmpeg = shutil.which("ffmpeg")
-    if system_ffmpeg:
-        return _ffmpeg_result(system_ffmpeg)
-
-    # 3. pip install imageio-ffmpeg
-    logger.info("ffmpeg not found — installing imageio-ffmpeg via pip...")
-    if _pip_install("imageio-ffmpeg"):
-        ffmpeg_path = _get_imageio_ffmpeg_path()
-        if ffmpeg_path:
-            return _ffmpeg_result(ffmpeg_path)
-
-    return {"available": False, "error": "ffmpeg installation failed"}
+    return {"available": False, "error": "ffmpeg not found in PATH"}
 
 
-def _get_imageio_ffmpeg_path() -> str | None:
-    """imageio_ffmpeg 모듈에서 ffmpeg 실행 파일 경로를 가져옵니다."""
-    try:
-        import imageio_ffmpeg
-        path = imageio_ffmpeg.get_ffmpeg_exe()
-        if path and Path(path).is_file():
-            return path
-    except (ImportError, Exception):
-        pass
-    return None
+def _check_yt_dlp():
+    """yt-dlp 사용 가능 여부 확인.
 
-
-def _ffmpeg_result(path: str) -> dict:
-    """ffmpeg 경로를 검증하고 결과 dict 를 반환합니다."""
-    try:
-        result = subprocess.run(
-            [path, "-version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        version_line = (result.stdout.split("\n")[0] if result.stdout else "unknown")
-        return {"available": True, "path": path, "version": version_line}
-    except Exception as exc:
-        return {"available": True, "path": path, "version": f"(verify failed: {exc})"}
-
-
-# ──────────────────────────────────────────────────────────────
-#  yt-dlp (pip install yt-dlp)
-# ──────────────────────────────────────────────────────────────
-
-
-def _ensure_yt_dlp() -> dict:
-    """yt-dlp 확인 → 없으면 pip install → 경로 반환."""
-
-    # 1. PATH 에서 찾기
-    yt_dlp_path = shutil.which("yt-dlp")
-    if yt_dlp_path:
-        return _yt_dlp_result(yt_dlp_path)
-
-    # 2. pip 의 Scripts 폴더 (Windows)
-    if sys.platform == "win32":
-        for scripts_dir in _pip_scripts_dirs():
-            candidate = scripts_dir / "yt-dlp.exe"
-            if candidate.is_file():
-                return _yt_dlp_result(str(candidate))
-
-    # 3. pip install yt-dlp
-    logger.info("yt-dlp not found — installing via pip...")
-    if _pip_install("yt-dlp"):
-        # 재탐색
-        yt_dlp_path = shutil.which("yt-dlp")
-        if yt_dlp_path:
-            return _yt_dlp_result(yt_dlp_path)
-        # Windows Scripts 폴더 재확인
-        if sys.platform == "win32":
-            for scripts_dir in _pip_scripts_dirs():
-                candidate = scripts_dir / "yt-dlp.exe"
-                if candidate.is_file():
-                    return _yt_dlp_result(str(candidate))
-
-    return {"available": False, "error": "yt-dlp installation failed"}
-
-
-def _pip_scripts_dirs():
-    """pip 이 바이너리를 설치하는 Scripts 경로 후보들."""
-    import site
-    dirs = []
-    # --user 설치 (가장 흔함)
-    user_base = site.getusersitepackages()
-    if user_base:
-        dirs.append(Path(user_base).parent / "Scripts")
-    # 시스템/venv 설치
-    dirs.append(Path(sys.prefix) / "Scripts")
-    return dirs
-
-
-def _yt_dlp_result(path: str) -> dict:
-    """yt-dlp 경로를 검증하고 결과 dict 를 반환합니다."""
-    try:
-        result = subprocess.run(
-            [path, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        version = result.stdout.strip() if result.stdout else "unknown"
-        return {"available": True, "path": path, "version": version}
-    except Exception as exc:
-        return {"available": True, "path": path, "version": f"(verify failed: {exc})"}
-
-
-# ──────────────────────────────────────────────────────────────
-#  .deps-resolved.json 기록
-# ──────────────────────────────────────────────────────────────
-
-
-def _write_deps_resolved(results: dict):
-    """바이너리 의존성 경로를 JSON 파일에 기록합니다.
-
-    music.js 가 시작 시 이 파일을 읽어 ffmpeg / yt-dlp 경로를 설정합니다.
+    시스템 PATH 및 현재 Python 환경의 Scripts 디렉토리에서 탐색합니다.
+    pip install yt-dlp 로 설치된 경우 Scripts 디렉토리에 존재합니다.
     """
-    out_path = _EXT_DIR / ".deps-resolved.json"
-    try:
-        out_path.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
-        logger.info("Wrote dependency paths to %s", out_path)
-    except Exception as exc:
-        logger.error("Failed to write .deps-resolved.json: %s", exc)
+    # 1. PATH 탐색
+    found = shutil.which("yt-dlp")
+
+    # 2. PATH에 없으면 현재 Python 의 Scripts/bin 디렉토리 탐색 (venv 지원)
+    if not found:
+        scripts_dir = Path(sys.executable).parent
+        candidate = scripts_dir / ("yt-dlp.exe" if sys.platform == "win32" else "yt-dlp")
+        if candidate.exists():
+            found = str(candidate)
+
+    if found:
+        try:
+            result = subprocess.run(
+                [found, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            version = result.stdout.strip() if result.stdout else "unknown"
+            return {"available": True, "path": found, "version": version}
+        except Exception as exc:
+            return {"available": False, "error": str(exc)}
+
+    return {
+        "available": False,
+        "error": "yt-dlp not found in PATH. Install: pip install yt-dlp",
+    }
+
+
+def _check_opus():
+    """Opus 라이브러리 사용 가능 여부 확인.
+
+    시스템 공유 라이브러리를 탐색합니다.
+    찾지 못해도 Node.js 의 opusscript (WASM) 가 대체 가능하므로
+    ``available: True`` (fallback) 로 반환합니다.
+    """
+    if sys.platform == "win32":
+        lib_names = ["opus", "libopus-0", "libopus"]
+    elif sys.platform == "darwin":
+        lib_names = ["libopus.dylib", "libopus.0.dylib"]
+    else:
+        lib_names = ["libopus.so", "libopus.so.0"]
+
+    for name in lib_names:
+        try:
+            ctypes.cdll.LoadLibrary(name)
+            return {"available": True, "library": name}
+        except OSError:
+            continue
+
+    # 시스템 opus 가 없어도 Node.js opusscript(WASM) 가 대체 가능
+    return {
+        "available": True,
+        "library": "opusscript (Node.js fallback)",
+        "note": "System opus not found — Node.js opusscript/wasm should work",
+    }
 
 
 # ──────────────────────────────────────────────────────────────
@@ -258,9 +265,11 @@ def main():
         print(json.dumps({"error": f"Unknown function: {func_name}"}))
         sys.exit(1)
 
-    config_str = sys.stdin.read()
+    config_str = sys.stdin.read().strip()
+    # BOM 제거 (PowerShell 등에서 echo 시 UTF-8 BOM 포함 가능)
+    config_str = config_str.lstrip("\ufeff")
     try:
-        config = json.loads(config_str) if config_str.strip() else {}
+        config = json.loads(config_str) if config_str else {}
     except json.JSONDecodeError as e:
         print(json.dumps({"error": f"Invalid JSON config: {e}"}))
         sys.exit(1)
