@@ -311,7 +311,7 @@ def main() -> None:
     manifest_path = DIST_DIR / "manifest.json"
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
-    print(f"\n\ud83d\udccb manifest.json \uc0dd\uc131 \uc644\ub8cc")
+    print(f"\n\U0001f4cb manifest.json 생성 완료")
 
     # ── 4. 변경 사항 감지 ─────────────────────────────
     prev_manifest = load_previous_manifest()
