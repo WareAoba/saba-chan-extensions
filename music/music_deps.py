@@ -114,9 +114,10 @@ def _ensure_npm_dependencies():
             "error": "package.json not found in extensions/music/",
         }
 
-    # 핵심 패키지 존재 여부로 설치 상태 판단
-    voice_marker = node_modules / "@discordjs" / "voice" / "package.json"
-    if voice_marker.exists():
+    # 핵심 보조 패키지 존재 여부로 설치 상태 판단
+    # (@discordjs/voice 는 봇 본체에 있으므로 opusscript 를 마커로 사용)
+    marker = node_modules / "opusscript" / "package.json"
+    if marker.exists():
         return {"available": True, "installed": True}
 
     # 미설치 → npm install 시도
