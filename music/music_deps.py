@@ -181,21 +181,50 @@ def _check_ffmpeg():
     return {"available": False, "error": "ffmpeg not found in PATH"}
 
 
-def _check_yt_dlp():
-    """yt-dlp 사용 가능 여부 확인.
-
-    시스템 PATH 및 현재 Python 환경의 Scripts 디렉토리에서 탐색합니다.
-    pip install yt-dlp 로 설치된 경우 Scripts 디렉토리에 존재합니다.
-    """
+def _find_yt_dlp() -> str | None:
+    """yt-dlp 실행 파일 경로를 탐색합니다."""
     # 1. PATH 탐색
     found = shutil.which("yt-dlp")
+    if found:
+        return found
 
-    # 2. PATH에 없으면 현재 Python 의 Scripts/bin 디렉토리 탐색 (venv 지원)
+    # 2. 현재 Python 의 Scripts/bin 디렉토리 탐색 (venv 지원)
+    scripts_dir = Path(sys.executable).parent
+    candidate = scripts_dir / ("yt-dlp.exe" if sys.platform == "win32" else "yt-dlp")
+    if candidate.exists():
+        return str(candidate)
+
+    return None
+
+
+def _check_yt_dlp():
+    """yt-dlp 사용 가능 여부 확인 & 자동 설치.
+
+    시스템 PATH 및 현재 Python 환경의 Scripts 디렉토리에서 탐색합니다.
+    찾지 못하면 ``pip install yt-dlp`` 로 자동 설치를 시도합니다.
+    """
+    found = _find_yt_dlp()
+
+    # 미설치 → pip install 시도
     if not found:
-        scripts_dir = Path(sys.executable).parent
-        candidate = scripts_dir / ("yt-dlp.exe" if sys.platform == "win32" else "yt-dlp")
-        if candidate.exists():
-            found = str(candidate)
+        logger.info("yt-dlp not found, attempting pip install...")
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "yt-dlp"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                logger.info("yt-dlp installed via pip")
+                found = _find_yt_dlp()
+            else:
+                stderr = result.stderr.strip()[:500] if result.stderr else ""
+                logger.error("pip install yt-dlp failed (exit %d): %s", result.returncode, stderr)
+        except subprocess.TimeoutExpired:
+            logger.error("pip install yt-dlp timed out (120s)")
+        except Exception as exc:
+            logger.error("pip install yt-dlp error: %s", exc)
 
     if found:
         try:
@@ -212,7 +241,7 @@ def _check_yt_dlp():
 
     return {
         "available": False,
-        "error": "yt-dlp not found in PATH. Install: pip install yt-dlp",
+        "error": "yt-dlp not found and auto-install failed. Install manually: pip install yt-dlp",
     }
 
 

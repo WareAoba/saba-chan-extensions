@@ -4,7 +4,8 @@
   "private": true,
   "description": "사바쨩 Music extension — Discord 음성 채널 음악 재생에 필요한 Node.js 의존성",
   "dependencies": {
-    "@discordjs/voice": "^0.18.0",
+    "@discordjs/voice": "^0.19.0",
+    "@snazzah/davey": "^0.1.10",
     "ffmpeg-static": "5.2.0",
     "opusscript": "^0.0.8",
     "play-dl": "^1.9.7",
