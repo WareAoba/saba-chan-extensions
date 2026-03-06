@@ -229,12 +229,15 @@ class SteamCMD:
                         break
                     chunks.append(chunk)
                     downloaded += len(chunk)
-                    pct = min(int(downloaded * 100 / total), 100)
-                    if pct != last_pct:
+                    # SteamCMD 자체 다운로드는 전체 프로비저닝의 극히 일부이므로
+                    # 진행률을 0~2% 범위로 제한하여 install() 진행률과 혼동 방지
+                    raw_pct = min(int(downloaded * 100 / total), 100)
+                    pct = min(int(raw_pct * 2 / 100), 2)
+                    if raw_pct != last_pct:
                         dl_mb = downloaded / 1_048_576
                         total_mb = total / 1_048_576
                         _progress(pct, f"SteamCMD: {dl_mb:.1f}/{total_mb:.1f} MB")
-                        last_pct = pct
+                        last_pct = raw_pct
                 data = b"".join(chunks)
             else:
                 data = resp.read()
@@ -331,8 +334,12 @@ class SteamCMD:
             _log(f"Running (attempt {attempt}/{max_attempts}): {' '.join(args)}")
 
             try:
-                # 설치 전 디렉터리 초기 크기 측정
+                # 설치 전 디렉터리 초기 크기 측정 (install_dir + steamcmd 캐시)
                 initial_size = _dir_size(install_dir)
+                if self._path:
+                    _scmd_cache = self._path.parent / "steamapps"
+                    if _scmd_cache.exists():
+                        initial_size += _dir_size(_scmd_cache)
 
                 proc = subprocess.Popen(
                     args,
@@ -377,18 +384,28 @@ class SteamCMD:
                 # SteamCMD stdout이 버퍼링되어도 디스크 사용량은 실시간으로 변함.
                 _progress(0, "Connecting to Steam...")
                 last_msg = ""
+                last_pct = -1
+                heartbeat_counter = 0
                 estimated_total = _KNOWN_APP_SIZES.get(app_id, 0)
+
+                # SteamCMD 자체 디렉터리도 모니터링 (다운로드 캐시가 여기에 쌓일 수 있음)
+                steamcmd_dir = self._path.parent if self._path else None
 
                 while proc.poll() is None:
                     _time.sleep(2.0)
+                    heartbeat_counter += 1
 
                     # stdout 파싱 결과가 있으면 우선 사용 (SteamCMD가 flush한 경우)
                     if parsed_pct[0] > 0:
                         pct = parsed_pct[0]
                         msg = parsed_msg[0]
                     else:
-                        # 디스크 사용량 기반 추정
+                        # 디스크 사용량 기반 추정 (install_dir + steamcmd 캐시)
                         current_size = _dir_size(install_dir)
+                        if steamcmd_dir and steamcmd_dir != install_dir:
+                            cache_dir = steamcmd_dir / "steamapps"
+                            if cache_dir.exists():
+                                current_size += _dir_size(cache_dir)
                         added_bytes = current_size - initial_size
                         added_mb = added_bytes / 1_048_576
 
@@ -406,10 +423,12 @@ class SteamCMD:
                             pct = 0
                             msg = "Preparing server files..."
 
-                    # 매 사이클마다 보고 — 메시지나 pct가 변할 때
-                    if msg != last_msg:
+                    # 메시지 또는 퍼센티지가 변할 때마다 보고 + 10사이클(20초)마다 heartbeat
+                    if msg != last_msg or pct != last_pct or heartbeat_counter >= 10:
                         _progress(pct, msg)
                         last_msg = msg
+                        last_pct = pct
+                        heartbeat_counter = 0
 
                 # 프로세스 종료 — reader 스레드 합류
                 reader_thread.join(timeout=10)

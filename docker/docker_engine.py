@@ -54,6 +54,25 @@ _COMPOSE_URL = (
     "v2.33.1/docker-compose-linux-x86_64"
 )
 
+
+def _get_docker_engine_url() -> str:
+    """Return Docker Engine download URL for the current architecture."""
+    arch = platform.machine()
+    if arch == "aarch64":
+        return "https://download.docker.com/linux/static/stable/aarch64/docker-27.5.1.tgz"
+    return _DOCKER_ENGINE_URL  # x86_64 default
+
+
+def _get_compose_url() -> str:
+    """Return Docker Compose download URL for the current architecture."""
+    arch = platform.machine()
+    if arch == "aarch64":
+        return (
+            "https://github.com/docker/compose/releases/download/"
+            "v2.33.1/docker-compose-linux-aarch64"
+        )
+    return _COMPOSE_URL  # x86_64 default
+
 # WSL2 paths (Windows only)
 _WSL2_DIR = "/opt/saba-chan/docker"
 _WSL2_DATA = "/opt/saba-chan/docker/data"
@@ -408,7 +427,7 @@ class DockerEngine:
     def _native_download_engine(self, *, timeout: int = 300) -> None:
         self._dir.mkdir(parents=True, exist_ok=True)
         archive = self._dir / "docker.tgz"
-        _download(_DOCKER_ENGINE_URL, archive, timeout=timeout, label="Docker Engine")
+        _download(_get_docker_engine_url(), archive, timeout=timeout, label="Docker Engine")
         _log(f"Extracting to {self._dir}")
         with tarfile.open(archive, "r:gz") as tf:
             for member in tf.getmembers():
@@ -427,7 +446,7 @@ class DockerEngine:
     def _wsl_download_engine(self, *, timeout: int = 300) -> None:
         _log("Downloading Docker Engine for WSL2...")
         tmp = Path(os.environ.get("TEMP", ".")) / "saba-docker-linux.tgz"
-        _download(_DOCKER_ENGINE_URL, tmp, timeout=timeout, label="Docker Engine")
+        _download(_get_docker_engine_url(), tmp, timeout=timeout, label="Docker Engine")
         wsl_tmp = _win_to_wsl_path(tmp)
         _wsl_run(["mkdir", "-p", _WSL2_DIR], root=True)
         _wsl_run(["mkdir", "-p", _WSL2_DATA], root=True)
@@ -454,7 +473,7 @@ class DockerEngine:
         self._native_download_compose(timeout=timeout)
 
     def _native_download_compose(self, *, timeout: int = 300) -> None:
-        _download(_COMPOSE_URL, self.compose_exe, timeout=timeout, label="Docker Compose")
+        _download(_get_compose_url(), self.compose_exe, timeout=timeout, label="Docker Compose")
         self.compose_exe.chmod(
             self.compose_exe.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
         )
@@ -463,7 +482,7 @@ class DockerEngine:
     def _wsl_download_compose(self, *, timeout: int = 300) -> None:
         _log("Downloading Docker Compose for WSL2...")
         tmp = Path(os.environ.get("TEMP", ".")) / "docker-compose-linux"
-        _download(_COMPOSE_URL, tmp, timeout=timeout, label="Docker Compose")
+        _download(_get_compose_url(), tmp, timeout=timeout, label="Docker Compose")
         wsl_tmp = _win_to_wsl_path(tmp)
         wsl_dest = f"{_WSL2_DIR}/docker-compose"
         _wsl_run(["cp", wsl_tmp, wsl_dest], root=True)
