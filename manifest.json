@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-02-28T22:35:01.626697+00:00",
+  "generated_at": "2026-03-06T17:10:40.826762+00:00",
   "extensions": {
     "docker": {
       "name": "Docker Isolation",
@@ -12,7 +12,7 @@
         "steamcmd": ">=0.1.0"
       },
       "asset": "extension-docker.zip",
-      "sha256": "75266ec15499e0017054195e8c2effe0e4a534ddd97b97736ad3dd3fca903290",
+      "sha256": "bcf71ee93a9eed6bcd899d4114b648dad62a7fd91f599007fcbbc2de3487b286",
       "install_dir": "extensions/docker",
       "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-docker.zip",
       "has_gui": true,
@@ -26,7 +26,7 @@
       "min_app_version": "0.1.0",
       "dependencies": [],
       "asset": "extension-music.zip",
-      "sha256": "a2c102839c3ea070b92381d9a214b628f0090bfe5bf77c286eea086c51821d01",
+      "sha256": "4dc90d7fd0d8e43d78067365827c0c4d611237023032df17f6daf18ebe243138",
       "install_dir": "extensions/music",
       "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-music.zip",
       "has_gui": false,
@@ -40,7 +40,7 @@
       "min_app_version": "0.1.0",
       "dependencies": [],
       "asset": "extension-steamcmd.zip",
-      "sha256": "140ce77a2992c49fad67e2101c18c86b9c2e45be3e5f69dec4cb70c1e511f125",
+      "sha256": "de563fad2cf4f82c5197ee8b1164f83ec1a1505ba780261d8a2486bade1cdff0",
       "install_dir": "extensions/steamcmd",
       "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-steamcmd.zip",
       "has_gui": false,
@@ -54,8 +54,8 @@
       "min_app_version": "0.1.0",
       "dependencies": [],
       "asset": "extension-ue4-ini.zip",
-      "sha256": "0ea0783cb779217f695e5df01942a7281a54bfbd4d0a3aa47eb27fdc8523a35a",
-      "install_dir": "extensions/ue4_ini",
+      "sha256": "8ca9f9b1b6a164080e0aa9feacab0f6baa52854855a247ec55cb9a291953ff11",
+      "install_dir": "extensions/ue4-ini",
       "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-ue4-ini.zip",
       "has_gui": false,
       "has_i18n": false
