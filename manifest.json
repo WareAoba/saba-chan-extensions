@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-03-06T17:27:01.961110+00:00",
+  "generated_at": "2026-03-07T08:41:23.111300+00:00",
   "extensions": {
     "docker": {
       "name": "Docker Isolation",
@@ -12,7 +12,7 @@
         "steamcmd": ">=0.1.0"
       },
       "asset": "extension-docker.zip",
-      "sha256": "b82ed0a5a7b801e1268a4a34aff31b91075509c525733a41533aa7fbebe4dd75",
+      "sha256": "252ba2d2b6809c85591eaae92ddb95031f1a02b0eb1a5c2c9ac7f5eae69e7bc0",
       "install_dir": "extensions/docker",
       "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-docker.zip",
       "has_gui": true,
@@ -26,7 +26,7 @@
       "min_app_version": "0.1.0",
       "dependencies": [],
       "asset": "extension-music.zip",
-      "sha256": "8c820f32ac278fe182887d3ef1e9f335348ac03eebca6f11709254c14fdc4dfc",
+      "sha256": "eab4de5c4479175397dd62c467787a254e72b251a258a9a74f676e63666401e0",
       "install_dir": "extensions/music",
       "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-music.zip",
       "has_gui": false,
@@ -40,7 +40,7 @@
       "min_app_version": "0.1.0",
       "dependencies": [],
       "asset": "extension-steamcmd.zip",
-      "sha256": "b44d80559358a4a3071401d49d821cdac2050ec2381bbe986053f1b559d6780c",
+      "sha256": "4ac1dbc7a93badec179363061203b54519bb19885f7faecbaf9e32f1a2da9bf3",
       "install_dir": "extensions/steamcmd",
       "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-steamcmd.zip",
       "has_gui": false,
@@ -54,7 +54,7 @@
       "min_app_version": "0.1.0",
       "dependencies": [],
       "asset": "extension-ue4-ini.zip",
-      "sha256": "44a8c96c96014590b5b7248d5b1bdad72b13ff77044cf2a6673ead821cc94165",
+      "sha256": "534d60c621685c17b255a6c93cb0edc82267e103d155fa5bba9b82abedd50f79",
       "install_dir": "extensions/ue4-ini",
       "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-ue4-ini.zip",
       "has_gui": false,
