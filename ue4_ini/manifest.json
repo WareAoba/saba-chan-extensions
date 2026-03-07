@@ -3,7 +3,7 @@
   "name": "UE4 INI Parser",
   "version": "0.1.0",
   "description": "Unreal Engine 4 INI 파일의 OptionSettings 파싱 및 기록",
-  "author": "saba-chan",
+  "author": "WareAoba",
   "min_app_version": "0.1.0",
   "dependencies": [],
 

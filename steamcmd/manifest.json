@@ -3,7 +3,7 @@
   "name": "SteamCMD",
   "version": "0.1.0",
   "description": "SteamCMD를 사용한 게임 서버 설치 및 업데이트 자동화",
-  "author": "saba-chan",
+  "author": "WareAoba",
   "min_app_version": "0.1.0",
   "dependencies": [],
 

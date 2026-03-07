@@ -3,7 +3,7 @@
   "name": "Music Bot",
   "version": "0.1.0",
   "description": "Discord 음성 채널 음악 재생 (yt-dlp + ffmpeg)",
-  "author": "saba-chan",
+  "author": "WareAoba",
   "min_app_version": "0.1.0",
   "dependencies": [],
 

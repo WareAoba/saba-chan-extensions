@@ -3,7 +3,7 @@
   "name": "Docker Isolation",
   "version": "0.1.0",
   "description": "Docker 컨테이너를 사용한 게임 서버 격리 실행",
-  "author": "saba-chan",
+  "author": "WareAoba",
   "min_app_version": "0.1.0",
   "dependencies": {
     "steamcmd": ">=0.1.0"
