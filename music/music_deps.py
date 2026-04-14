@@ -7,7 +7,7 @@ daemon.startup 훅으로 실행됩니다.
 의존성 구조:
   extensions/music/package.json   — npm 의존성 정의 (@discordjs/voice 등)
   extensions/music/node_modules/  — npm install 결과물
-  시스템 PATH                     — ffmpeg, yt-dlp
+  포터블 바이너리                  — ffmpeg, yt-dlp (AppData/saba-chan 내)
 
 실제 음악 재생 로직은 discord_bot/extensions/music.js (Node.js) 에 있습니다.
 """
@@ -25,6 +25,67 @@ logger = logging.getLogger("saba.ext.music")
 
 # 이 파일이 위치한 extensions/music/ 디렉토리
 _EXT_DIR = Path(__file__).resolve().parent
+
+
+def _get_saba_data_dir() -> Path:
+    """사바쨩 AppData 디렉토리를 반환합니다."""
+    saba_dir = os.environ.get("SABA_DATA_DIR")
+    if saba_dir:
+        return Path(saba_dir)
+    if sys.platform == "win32":
+        return Path(os.environ.get("APPDATA", "")) / "saba-chan"
+    return Path.home() / ".config" / "saba-chan"
+
+
+def _get_portable_install_root() -> Path:
+    """사바쨩 설치 루트 (실행 바이너리 기준)를 반환합니다."""
+    # daemon이 호출할 때 sys.executable의 부모 디렉토리 체인에서 설치 루트를 추정
+    # SABA_INSTALL_ROOT 환경변수가 있으면 우선 사용
+    root = os.environ.get("SABA_INSTALL_ROOT")
+    if root:
+        return Path(root)
+    return Path(sys.executable).resolve().parent
+
+
+def _find_portable_npm() -> str | None:
+    """사바쨩 포터블 Node.js 환경의 npm 경로를 탐색합니다."""
+    data_dir = _get_saba_data_dir()
+    install_root = _get_portable_install_root()
+
+    candidates = []
+    if sys.platform == "win32":
+        candidates = [
+            data_dir / "node-env" / "npm.cmd",
+            install_root / "node-env" / "npm.cmd",
+        ]
+    else:
+        candidates = [
+            data_dir / "node-env" / "bin" / "npm",
+            install_root / "node-env" / "bin" / "npm",
+        ]
+
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return None
+
+
+def _find_portable_ffmpeg() -> str | None:
+    """사바쨩 포터블 ffmpeg 경로를 탐색합니다."""
+    data_dir = _get_saba_data_dir()
+    install_root = _get_portable_install_root()
+
+    exe = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
+    candidates = [
+        data_dir / "bin" / exe,
+        data_dir / "ffmpeg" / exe,
+        install_root / "ffmpeg" / exe,
+        install_root / "bin" / exe,
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return None
 
 
 def check_dependencies(**_kwargs):
@@ -120,14 +181,18 @@ def _ensure_npm_dependencies():
     if marker.exists():
         return {"available": True, "installed": True}
 
-    # 미설치 → npm install 시도
+    # 미설치 → npm install 시도 (포터블 npm 우선)
     logger.info("Music npm dependencies not found, running npm install...")
-    npm_cmd = shutil.which("npm")
+    npm_cmd = _find_portable_npm()
     if not npm_cmd:
-        return {
-            "available": False,
-            "error": "npm not found in PATH — cannot auto-install music dependencies",
-        }
+        # 개발 모드에서만 시스템 npm 허용
+        if os.environ.get("SABA_DEV_MODE") == "1":
+            npm_cmd = shutil.which("npm")
+        if not npm_cmd:
+            return {
+                "available": False,
+                "error": "Portable npm not found — install Node.js via saba-chan installer",
+            }
 
     try:
         result = subprocess.run(
@@ -162,8 +227,12 @@ def _ensure_npm_dependencies():
 
 
 def _check_ffmpeg():
-    """ffmpeg 사용 가능 여부 확인."""
-    path = shutil.which("ffmpeg")
+    """ffmpeg 사용 가능 여부 확인 (포터블 바이너리 우선)."""
+    # 1. 사바쨩 포터블 ffmpeg 탐색
+    path = _find_portable_ffmpeg()
+    # 2. 개발 모드에서만 시스템 PATH fallback 허용
+    if not path and os.environ.get("SABA_DEV_MODE") == "1":
+        path = shutil.which("ffmpeg")
     if path:
         try:
             result = subprocess.run(
@@ -179,21 +248,31 @@ def _check_ffmpeg():
         except Exception as exc:
             return {"available": False, "error": str(exc)}
 
-    return {"available": False, "error": "ffmpeg not found in PATH"}
+    return {"available": False, "error": "Portable ffmpeg not found — install via saba-chan installer"}
 
 
 def _find_yt_dlp() -> str | None:
-    """yt-dlp 실행 파일 경로를 탐색합니다."""
-    # 1. PATH 탐색
-    found = shutil.which("yt-dlp")
-    if found:
-        return found
+    """yt-dlp 실행 파일 경로를 탐색합니다 (포터블 우선)."""
+    # 1. 사바쨩 포터블 경로 탐색
+    data_dir = _get_saba_data_dir()
+    install_root = _get_portable_install_root()
+    exe = "yt-dlp.exe" if sys.platform == "win32" else "yt-dlp"
+    for base in [data_dir / "bin", install_root / "bin", data_dir / "yt-dlp"]:
+        candidate = base / exe
+        if candidate.exists():
+            return str(candidate)
 
-    # 2. 현재 Python 의 Scripts/bin 디렉토리 탐색 (venv 지원)
+    # 2. 현재 Python 의 Scripts/bin 디렉토리 탐색 (포터블 venv)
     scripts_dir = Path(sys.executable).parent
-    candidate = scripts_dir / ("yt-dlp.exe" if sys.platform == "win32" else "yt-dlp")
+    candidate = scripts_dir / exe
     if candidate.exists():
         return str(candidate)
+
+    # 3. 개발 모드에서만 시스템 PATH fallback
+    if os.environ.get("SABA_DEV_MODE") == "1":
+        found = shutil.which("yt-dlp")
+        if found:
+            return found
 
     return None
 
@@ -206,26 +285,35 @@ def _check_yt_dlp():
     """
     found = _find_yt_dlp()
 
-    # 미설치 → pip install 시도
+    # 미설치 → 포터블 Python의 pip으로만 설치 시도 (시스템 pip 사용 금지)
     if not found:
-        logger.info("yt-dlp not found, attempting pip install...")
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "yt-dlp"],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            if result.returncode == 0:
-                logger.info("yt-dlp installed via pip")
-                found = _find_yt_dlp()
-            else:
-                stderr = result.stderr.strip()[:500] if result.stderr else ""
-                logger.error("pip install yt-dlp failed (exit %d): %s", result.returncode, stderr)
-        except subprocess.TimeoutExpired:
-            logger.error("pip install yt-dlp timed out (120s)")
-        except Exception as exc:
-            logger.error("pip install yt-dlp error: %s", exc)
+        # 현재 실행 중인 Python이 포터블 환경인지 확인
+        is_portable_python = (
+            str(_get_saba_data_dir()) in str(Path(sys.executable).resolve())
+            or str(_get_portable_install_root()) in str(Path(sys.executable).resolve())
+            or os.environ.get("SABA_DEV_MODE") == "1"
+        )
+        if not is_portable_python:
+            logger.warning("yt-dlp not found and system pip install is not allowed (portable principle)")
+        else:
+            logger.info("yt-dlp not found, attempting pip install in portable env...")
+            try:
+                result = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "yt-dlp"],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if result.returncode == 0:
+                    logger.info("yt-dlp installed via pip (portable)")
+                    found = _find_yt_dlp()
+                else:
+                    stderr = result.stderr.strip()[:500] if result.stderr else ""
+                    logger.error("pip install yt-dlp failed (exit %d): %s", result.returncode, stderr)
+            except subprocess.TimeoutExpired:
+                logger.error("pip install yt-dlp timed out (120s)")
+            except Exception as exc:
+                logger.error("pip install yt-dlp error: %s", exc)
 
     if found:
         try:
@@ -242,7 +330,7 @@ def _check_yt_dlp():
 
     return {
         "available": False,
-        "error": "yt-dlp not found and auto-install failed. Install manually: pip install yt-dlp",
+        "error": "yt-dlp not found in portable environment. Install via saba-chan installer.",
     }
 
 

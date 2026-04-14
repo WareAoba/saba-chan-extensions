@@ -26,5 +26,17 @@
 
   "instance_fields": {},
 
+  "config_fields": {
+    "discord_token": {
+      "type": "string",
+      "optional": true
+    },
+    "default_volume": {
+      "type": "number",
+      "default": 50,
+      "optional": true
+    }
+  },
+
   "i18n_dir": null
 }

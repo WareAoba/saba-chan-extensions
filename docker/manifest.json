@@ -128,5 +128,7 @@
     "docker_memory_limit": { "type": "string", "optional": true }
   },
 
+  "config_fields": {},
+
   "i18n_dir": "i18n/"
 }

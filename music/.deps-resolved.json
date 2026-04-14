@@ -1,17 +1,16 @@
 {
   "npm_packages": {
-    "available": true,
-    "installed": true
+    "available": false,
+    "error": "Portable npm not found — install Node.js via saba-chan installer"
   },
   "ffmpeg": {
-    "available": true,
-    "path": "C:\\Users\\jace5\\AppData\\Local\\Microsoft\\WinGet\\Links\\ffmpeg.EXE",
-    "version": "ffmpeg version 8.0.1-full_build-www.gyan.dev Copyright (c) 2000-2025 the FFmpeg developers"
+    "available": false,
+    "error": "Portable ffmpeg not found — install via saba-chan installer"
   },
   "yt_dlp": {
     "available": true,
     "path": "C:\\Git\\saba-chan\\.venv\\Scripts\\yt-dlp.exe",
-    "version": "2026.03.03"
+    "version": "2026.03.17"
   },
   "opus": {
     "available": true,
