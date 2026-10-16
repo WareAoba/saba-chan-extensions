@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "id": "ue4-ini",
   "name": "UE4 INI Parser",
   "version": "0.1.0",
