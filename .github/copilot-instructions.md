@@ -1,13 +1,15 @@
 # saba-chan-extensions 개발 규칙 (시스템 레벨 강제)
 
 > 이 파일의 모든 규칙은 코드 작성 시 **반드시** 준수해야 한다. 예외 없음.
+>
+> 익스텐션 계약(manifest.json 스키마, hook, GUI 주입)에 관한 사실은 saba-chan 저장소 `docs/architecture/03-extensions.md`(코드 기준 문서)만 믿는다.
 
 ## 익스텐션 독립성
 - 익스텐션은 외부 확장이다. 메인 데몬 코드에 의존하는 로직을 작성하지 않는다.
 - 메인에서 지원하지 않는 기능이 필요하면 메인에 범용적으로 구현 요청한다.
 
 ## 경로·설정 경유 원칙
-- 익스텐션은 데몬이 상속하는 env var(`DAEMON_API_URL`, `APPDATA` 등)과 stdin config를 통해 설정을 받는다.
+- 익스텐션은 데몬이 상속하는 env var(`PYTHONPATH`, `SABA_ENABLED_EXTENSIONS`, `APPDATA` 등)과 stdin config를 통해 설정을 받는다.
 - 코드 내 임의 경로 직접 하드코딩 **금지**.
 - 프로세스 시작 시점에 필수 설정값 존재를 검증할 것.
 
