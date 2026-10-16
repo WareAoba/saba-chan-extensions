@@ -526,70 +526,6 @@ def _get_wsl_total_memory_mb() -> float | None:
     return None
 
 
-def container_stats(config: dict) -> dict:
-    """server.stats — docker stats --no-stream
-    
-    Rust: docker_container_stats() (D11)
-    
-    반환: docker_memory_usage, docker_memory_percent, docker_cpu_percent
-    """
-    ext_data = config.get("extension_data", {})
-    instance_dir = config.get("instance_dir", "")
-    
-    # 먼저 컨테이너 이름 파악
-    compose_file = "docker-compose.yml"
-    cmd = _compose_cmd(instance_dir, compose_file) + ["ps", "--format", "json", "-a"]
-    success, stdout, stderr = _run_cmd(cmd, cwd=instance_dir, timeout=15)
-
-    container_name = None
-    if success:
-        containers = _parse_compose_ps(stdout)
-        running = [c for c in containers if c.get("State") == "running"]
-        target = running[0] if running else (containers[0] if containers else None)
-        if target:
-            container_name = target.get("Name") or target.get("Names")
-
-    if not container_name:
-        return {"handled": True, "success": False, "error": "Container name not found"}
-
-    # docker stats
-    docker = _docker_cli()
-    fmt = "{{json .}}"
-    cmd = docker + ["stats", "--no-stream", "--format", fmt, container_name]
-    success, stdout, stderr = _run_cmd(cmd, timeout=15)
-
-    if not success:
-        return {"handled": True, "success": False, "error": f"docker stats failed: {stderr}"}
-
-    try:
-        stats = json.loads(stdout.strip())
-    except json.JSONDecodeError:
-        return {"handled": True, "success": False, "error": f"Invalid stats JSON: {stdout}"}
-
-    # 파싱: MemUsage "256MiB / 4GiB", MemPerc "6.25%", CPUPerc "12.50%"
-    mem_usage = stats.get("MemUsage", "")
-    mem_perc_str = stats.get("MemPerc", "0%").replace("%", "")
-    cpu_perc_str = stats.get("CPUPerc", "0%").replace("%", "")
-
-    try:
-        mem_perc = float(mem_perc_str)
-    except ValueError:
-        mem_perc = 0.0
-    try:
-        cpu_perc = float(cpu_perc_str)
-    except ValueError:
-        cpu_perc = 0.0
-
-    return {
-        "handled": True,
-        "success": True,
-        "container_name": container_name,
-        "docker_memory_usage": mem_usage,
-        "docker_memory_percent": mem_perc,
-        "docker_cpu_percent": cpu_perc,
-    }
-
-
 def shutdown_all(config: dict) -> dict:
     """daemon.shutdown — 모든 Docker 인스턴스의 compose down
     
@@ -712,37 +648,6 @@ def _parse_memory_to_mb(value: str) -> float | None:
             return float(value)
     except (ValueError, IndexError):
         return None
-
-
-def get_logs(config: dict) -> dict:
-    """server.logs — docker compose logs
-    
-    Rust: DockerComposeManager::logs() (D9)
-    """
-    instance_dir = config["instance_dir"]
-    lines = config.get("lines", 100)
-    compose_file = "docker-compose.yml"
-
-    cmd = _compose_cmd(instance_dir, compose_file) + ["logs", "--tail", str(lines)]
-    success, stdout, stderr = _run_cmd(cmd, cwd=instance_dir, timeout=30)
-
-    return {
-        "handled": True,
-        "success": True,
-        "logs": stdout,
-    }
-
-
-def pre_create(config: dict) -> dict:
-    """server.pre_create — 인스턴스 생성 전 Docker 설정
-    
-    Rust: create_instance Docker 분기 (M7)
-    """
-    # Docker 모드에서는 추가 설정이 필요할 수 있음
-    return {
-        "handled": False,
-        "success": True,
-    }
 
 
 def provision(config: dict) -> dict:
@@ -1162,11 +1067,8 @@ _FUNCTIONS = {
     "stop": stop,
     "cleanup": cleanup,
     "status": status,
-    "container_stats": container_stats,
     "shutdown_all": shutdown_all,
     "enrich_server_info": enrich_server_info,
-    "get_logs": get_logs,
-    "pre_create": pre_create,
     "provision": provision,
     "regenerate_compose": regenerate_compose,
 }

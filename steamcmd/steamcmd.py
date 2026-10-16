@@ -804,8 +804,6 @@ def _plugin_check_update(config: dict) -> dict:
 
 FUNCTIONS = {
     "ensure": _plugin_ensure,
-    "install": _plugin_install,
-    "update": _plugin_install,    # SteamCMD update == install
     "status": _plugin_status,
     "check_update": _plugin_check_update,
 }

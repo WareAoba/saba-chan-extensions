@@ -25,11 +25,6 @@
       "function": "shutdown_all",
       "condition": null
     },
-    "server.pre_create": {
-      "module": "compose_manager",
-      "function": "pre_create",
-      "condition": "instance.ext_data.docker_enabled"
-    },
     "server.post_create": {
       "module": "compose_manager",
       "function": "provision",
@@ -51,11 +46,6 @@
       "function": "status",
       "condition": "instance.ext_data.docker_enabled"
     },
-    "server.stats": {
-      "module": "compose_manager",
-      "function": "container_stats",
-      "condition": "instance.ext_data.docker_enabled"
-    },
     "server.pre_delete": {
       "module": "compose_manager",
       "function": "cleanup",
@@ -69,11 +59,6 @@
     "server.list_enrich": {
       "module": "compose_manager",
       "function": "enrich_server_info",
-      "condition": "instance.ext_data.docker_enabled"
-    },
-    "server.logs": {
-      "module": "compose_manager",
-      "function": "get_logs",
       "condition": "instance.ext_data.docker_enabled"
     }
   },

@@ -72,18 +72,6 @@ jobs:
           FORCE_RELEASE: ${{ inputs.force_release || 'false' }}
           PREV_MANIFEST: ${{ steps.prev.outputs.found == 'true' && '.prev/manifest.json' || '' }}
 
-      # ── 기존 릴리즈 삭제 ─────────────────────────────
-      - name: Delete previous releases
-        if: steps.build.outputs.should_release == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "🗑️ Cleaning up old releases..."
-          gh release list --limit 100 --json tagName -q '.[].tagName' | while read -r tag; do
-            echo "  Deleting release: $tag"
-            gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
-          done
-
       # ── 릴리즈 생성 ─────────────────────────────────
       - name: Create GitHub Release
         if: steps.build.outputs.should_release == 'true'

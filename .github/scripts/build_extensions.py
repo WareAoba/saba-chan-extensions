@@ -41,9 +41,9 @@ GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY", "WareAoba/saba-chan-extensions
 
 # zip 제외 대상
 EXCLUDE_DIRS = {"__pycache__", ".pytest_cache", ".git", "node_modules", "__pypackages__"}
-EXCLUDE_EXTENSIONS = {".pyc", ".pyo"}
+EXCLUDE_EXTENSIONS = {".pyc", ".pyo", ".pid"}
 EXCLUDE_PREFIXES = ("test_",)
-EXCLUDE_FILES = {"package-lock.json"}
+EXCLUDE_FILES = {"package-lock.json", ".deps-resolved.json"}
 
 
 # ── 유틸리티 ──────────────────────────────────────────────
