@@ -234,7 +234,7 @@ def build_release_body(
     lines.append("# 특정 익스텐션만 다운로드")
     lines.append(
         f"gh release download --repo {GITHUB_REPO} "
-        "--pattern 'extension-docker.zip'"
+        "--pattern 'extension-steamcmd.zip'"
     )
     lines.append("```")
 

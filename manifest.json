@@ -2,22 +2,6 @@
   "schema_version": 1,
   "generated_at": "2026-04-14T10:34:36.194808+00:00",
   "extensions": {
-    "docker": {
-      "name": "Docker Isolation",
-      "version": "0.1.0",
-      "description": "Docker 컨테이너를 사용한 게임 서버 격리 실행",
-      "author": "WareAoba",
-      "min_app_version": "0.1.0",
-      "dependencies": {
-        "steamcmd": ">=0.1.0"
-      },
-      "asset": "extension-docker.zip",
-      "sha256": "948a237cba71d82fd1d392337d1ba80b43ba25c663411ec64b549041e1928bda",
-      "install_dir": "extensions/docker",
-      "download_url": "https://github.com/WareAoba/saba-chan-extensions/releases/latest/download/extension-docker.zip",
-      "has_gui": true,
-      "has_i18n": true
-    },
     "steamcmd": {
       "name": "SteamCMD",
       "version": "0.1.0",
