@@ -1,8 +1,10 @@
 {
+  "schema_version": 1,
   "id": "steamcmd",
   "name": "SteamCMD",
   "version": "0.1.0",
-  "description": "SteamCMD를 사용한 게임 서버 설치 및 업데이트 자동화",
+  "description": "Installs and updates game servers with SteamCMD",
+  "descriptions": { "ko": "SteamCMD를 사용한 게임 서버 설치 및 업데이트 자동화" },
   "author": "WareAoba",
   "min_app_version": "0.1.0",
   "dependencies": [],
@@ -12,16 +14,6 @@
   },
 
   "hooks": {
-    "server.install": {
-      "module": "steamcmd",
-      "function": "install",
-      "condition": "instance.ext_data.install_method_steamcmd"
-    },
-    "server.update": {
-      "module": "steamcmd",
-      "function": "install",
-      "condition": "instance.ext_data.install_method_steamcmd"
-    },
     "server.check_update": {
       "module": "steamcmd",
       "function": "check_update",
@@ -35,5 +27,6 @@
     "steamcmd_anonymous": { "type": "boolean", "default": true },
     "steamcmd_beta": { "type": "string", "optional": true },
     "steamcmd_platform": { "type": "string", "optional": true }
-  }
+  },
+  "permissions": { "network": true, "spawn_process": true }
 }

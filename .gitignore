@@ -2,3 +2,4 @@ __pycache__
 test*
 node_modules
 .deps-resolved.json
+*.pid
