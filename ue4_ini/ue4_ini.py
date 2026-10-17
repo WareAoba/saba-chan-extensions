@@ -180,16 +180,20 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
         os.makedirs(os.path.dirname(ini_path) or ".", exist_ok=True)
         lines = []
         encoding = "utf-8"
+        newline = "\n"
         if os.path.isfile(ini_path):
             with open(ini_path, "rb") as f:
                 raw = f.read()
             # BOM이 있으면 떼고 읽어야 첫 줄 헤더가 맞는다. 쓸 때는 BOM을 되살린다
             if raw.startswith(b"\xef\xbb\xbf"):
                 encoding = "utf-8-sig"
+            # 줄바꿈도 원래 파일을 따른다 (새 파일은 LF)
+            if b"\r\n" in raw:
+                newline = "\r\n"
             lines = raw.decode(encoding).splitlines()
         lines = _merge_option_settings(lines, header, option_line)
-        with open(ini_path, "w", encoding=encoding) as f:
-            f.write("\n".join(lines) + "\n")
+        with open(ini_path, "w", encoding=encoding, newline="") as f:
+            f.write(newline.join(lines) + newline)
         return True
     except OSError:
         return False

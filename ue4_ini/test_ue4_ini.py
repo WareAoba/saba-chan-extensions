@@ -230,10 +230,18 @@ def test_write_escapes_quotes_and_roundtrips(tmp_path):
 
 def test_write_matches_section_after_bom_and_keeps_bom(tmp_path):
     path = tmp_path / "settings.ini"
-    path.write_text("[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Port=1)\n", encoding="utf-8-sig")
+    path.write_bytes("[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Port=1)\n".encode("utf-8-sig"))
     write_option_settings(str(path), {"Port": "8211"})
     raw = path.read_bytes()
     assert raw.startswith(b"\xef\xbb\xbf")
     content = raw.decode("utf-8-sig")
     assert content == "[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Port=8211)\n"
     assert parse_option_settings(str(path)) == {"Port": "8211"}
+
+
+def test_write_keeps_crlf_line_endings(tmp_path):
+    path = tmp_path / "settings.ini"
+    path.write_bytes(b"[Other]\r\nKey=Value\r\n")
+    write_option_settings(str(path), {"Port": "8211"})
+    raw = path.read_bytes()
+    assert b"\r\n" in raw and b"\n" not in raw.replace(b"\r\n", b"")
