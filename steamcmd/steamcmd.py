@@ -754,20 +754,6 @@ def _plugin_ensure(config: dict) -> dict:
     return steam.status()
 
 
-def _plugin_install(config: dict) -> dict:
-    steam = SteamCMD(config.get("explicit_path"))
-    steam.ensure_available()
-    return steam.install(
-        app_id=config["app_id"],
-        install_dir=config["install_dir"],
-        anonymous=config.get("anonymous", True),
-        beta=config.get("beta"),
-        beta_password=config.get("beta_password"),
-        platform_override=config.get("platform"),
-        validate=config.get("validate", True),
-    )
-
-
 def _plugin_status(config: dict) -> dict:
     steam = SteamCMD(config.get("explicit_path"))
     return steam.status()
