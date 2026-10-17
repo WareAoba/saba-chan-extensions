@@ -27,5 +27,6 @@
     "steamcmd_anonymous": { "type": "boolean", "default": true },
     "steamcmd_beta": { "type": "string", "optional": true },
     "steamcmd_platform": { "type": "string", "optional": true }
-  }
+  },
+  "permissions": { "network": true, "spawn_process": true }
 }
