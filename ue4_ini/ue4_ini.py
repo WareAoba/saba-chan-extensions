@@ -12,6 +12,8 @@ Usage:
     props["Difficulty"] = "2"
     write_option_settings("/path/to/PalWorldSettings.ini", props,
                           section="/Script/Pal.PalGameWorldSettings")
+
+라이브러리 전용 익스텐션이다 — 데몬 훅이 없고 모듈이 in-process로 import한다.
 """
 
 import os
@@ -27,6 +29,7 @@ def parse_option_settings(ini_path):
 
     Supports:
     - Quoted string values with commas: Key="Value with, commas"
+    - Backslash escapes inside quotes: Key="Say \\"hi\\""
     - Parenthesized values: CrossplayPlatforms=(Steam,Xbox)
 
     Args:
@@ -54,16 +57,18 @@ def parse_option_settings(ini_path):
             key = raw[i:eq].strip()
             i = eq + 1
             if i < len(raw) and raw[i] == '"':
-                # Quoted value
-                end_quote = raw.find('"', i + 1)
-                if end_quote == -1:
-                    value = raw[i + 1:]
-                    i = len(raw)
-                else:
-                    value = raw[i + 1:end_quote]
-                    i = end_quote + 1
-                    if i < len(raw) and raw[i] == ',':
+                # Quoted value — \" 와 \\ 이스케이프를 해제한다
+                chars = []
+                i += 1
+                while i < len(raw) and raw[i] != '"':
+                    if raw[i] == "\\" and i + 1 < len(raw):
                         i += 1
+                    chars.append(raw[i])
+                    i += 1
+                value = "".join(chars)
+                i += 1  # 닫는 따옴표
+                if i < len(raw) and raw[i] == ',':
+                    i += 1
             elif i < len(raw) and raw[i] == '(':
                 # Parenthesized value like CrossplayPlatforms=(Steam,Xbox)
                 depth = 1
@@ -112,36 +117,74 @@ def _should_quote(value):
     return True
 
 
-def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSettings]"):
-    """Write dict back to UE4 INI OptionSettings format.
+def _quote(value):
+    """따옴표 값 안의 \\ 와 " 를 이스케이프한다 (UE4 FParse::QuotedString 규칙)."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
-    Args:
-        ini_path: Path to the .ini file.
-        props: dict of key-value pairs.
-        section: INI section header (default: Palworld settings).
 
-    Returns:
-        True on success, False on OSError.
-    """
-    os.makedirs(os.path.dirname(ini_path), exist_ok=True)
-
+def _format_option_settings(props):
     parts = []
     for key, value in props.items():
         # UE4 INI: string values must be quoted; booleans, numbers,
         # and parenthesized groups (e.g. CrossplayPlatforms=(Steam,Xbox))
         # stay unquoted.
         if isinstance(value, str) and _should_quote(value):
-            parts.append(f'{key}="{value}"')
+            parts.append(f"{key}={_quote(value)}")
         else:
             parts.append(f"{key}={value}")
+    return f"OptionSettings=({','.join(parts)})"
 
-    content = (
-        f"{section}\n"
-        f"OptionSettings=({','.join(parts)})\n"
-    )
+
+def _merge_option_settings(lines, header, option_line):
+    """*header* 섹션의 OptionSettings 줄만 교체한다. 다른 섹션·주석·키는 유지한다.
+
+    섹션이 없으면 끝에 추가하고, 섹션에 OptionSettings가 없으면 헤더 바로 뒤에 넣는다.
+    """
     try:
+        start = next(i for i, line in enumerate(lines) if line.strip() == header)
+    except StopIteration:
+        if lines and lines[-1].strip():
+            lines.append("")
+        return lines + [header, option_line]
+
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")),
+        len(lines),
+    )
+    for i in range(start + 1, end):
+        if lines[i].lstrip().startswith("OptionSettings="):
+            lines[i] = option_line
+            return lines
+    lines.insert(start + 1, option_line)
+    return lines
+
+
+def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSettings]"):
+    """Write dict back to UE4 INI OptionSettings format.
+
+    기존 파일이 있으면 해당 섹션의 OptionSettings 줄만 바꾼다.
+    다른 섹션, 주석, 키는 그대로 둔다.
+
+    Args:
+        ini_path: Path to the .ini file.
+        props: dict of key-value pairs.
+        section: INI section header, with or without brackets (default: Palworld settings).
+
+    Returns:
+        True on success, False on OSError.
+    """
+    header = section if section.startswith("[") else f"[{section}]"
+    option_line = _format_option_settings(props)
+    try:
+        os.makedirs(os.path.dirname(ini_path) or ".", exist_ok=True)
+        lines = []
+        if os.path.isfile(ini_path):
+            with open(ini_path, "r", encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        lines = _merge_option_settings(lines, header, option_line)
         with open(ini_path, "w", encoding="utf-8") as f:
-            f.write(content)
+            f.write("\n".join(lines) + "\n")
         return True
     except OSError:
         return False

@@ -1,8 +1,8 @@
 {
   "id": "music",
-  "name": "Music Bot",
+  "name": "Music Bot Dependencies",
   "version": "0.1.0",
-  "description": "Discord 음성 채널 음악 재생 (yt-dlp + ffmpeg)",
+  "description": "디스코드 음악 봇이 사용하는 외부 의존성(ffmpeg / yt-dlp / Opus / Node.js npm 패키지)을 검증·보강합니다. 실제 음악 재생 로직은 클라우드 릴레이(server-chan/music-server)에 위치합니다.",
   "author": "WareAoba",
   "min_app_version": "0.1.0",
   "dependencies": [],
@@ -19,24 +19,5 @@
     }
   },
 
-  "gui": {
-    "builtin": true,
-    "slots": {}
-  },
-
-  "instance_fields": {},
-
-  "config_fields": {
-    "discord_token": {
-      "type": "string",
-      "optional": true
-    },
-    "default_volume": {
-      "type": "number",
-      "default": 50,
-      "optional": true
-    }
-  },
-
-  "i18n_dir": null
+  "instance_fields": {}
 }

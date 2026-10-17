@@ -1,4 +1,5 @@
 __pycache__
-test*
+*.pyc
+.pytest_cache/
 node_modules
 .deps-resolved.json

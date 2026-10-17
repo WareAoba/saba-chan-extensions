@@ -30,14 +30,14 @@ var SabaExtDocker = (() => {
   ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // ../../saba-chan-extensions/docker/gui/dist/_shims/react.js
+  // dist/_shims/react.js
   var require_react = __commonJS({
-    "../../saba-chan-extensions/docker/gui/dist/_shims/react.js"(exports, module) {
+    "dist/_shims/react.js"(exports, module) {
       module.exports = window.React;
     }
   });
 
-  // ../../saba-chan-extensions/docker/gui/src/index.js
+  // src/index.js
   var index_exports = {};
   __export(index_exports, {
     DockerBadge: () => DockerBadge,
@@ -50,7 +50,7 @@ var SabaExtDocker = (() => {
     registerSlots: () => registerSlots
   });
 
-  // ../../saba-chan-extensions/docker/gui/src/DockerBadge.js
+  // src/DockerBadge.js
   var import_react = __toESM(require_react());
   var DOCKER_SVG = /* @__PURE__ */ import_react.default.createElement("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 512 512", width: "14", height: "14" }, /* @__PURE__ */ import_react.default.createElement("path", { fill: "currentColor", d: "M507 211.16c-1.42-1.19-14.25-10.94-41.79-10.94a132.55 132.55 0 00-21.61 1.9c-5.22-36.4-35.38-54-36.57-55l-7.36-4.28-4.75 6.9a101.65 101.65 0 00-13.06 30.45c-5 20.7-1.9 40.2 8.55 56.85-12.59 7.14-33 8.8-37.28 9H15.94A15.93 15.93 0 000 262.07a241.25 241.25 0 0014.75 86.83C26.39 379.35 43.72 402 66 415.74 91.22 431.2 132.3 440 178.6 440a344.23 344.23 0 0062.45-5.71 257.44 257.44 0 0081.69-29.73 223.55 223.55 0 0055.57-45.67c26.83-30.21 42.74-64 54.38-94h4.75c29.21 0 47.26-11.66 57.23-21.65a63.31 63.31 0 0015.2-22.36l2.14-6.18z" }), /* @__PURE__ */ import_react.default.createElement("path", { fill: "currentColor", d: "M47.29 236.37H92.4a4 4 0 004-4v-40.48a4 4 0 00-4-4H47.29a4 4 0 00-4 4v40.44a4.16 4.16 0 004 4M109.5 236.37h45.12a4 4 0 004-4v-40.48a4 4 0 00-4-4H109.5a4 4 0 00-4 4v40.44a4.16 4.16 0 004 4M172.9 236.37H218a4 4 0 004-4v-40.48a4 4 0 00-4-4h-45.1a4 4 0 00-4 4v40.44a3.87 3.87 0 004 4M235.36 236.37h45.12a4 4 0 004-4v-40.48a4 4 0 00-4-4h-45.12a4 4 0 00-4 4v40.44a4 4 0 004 4M109.5 178.57h45.12a4.16 4.16 0 004-4v-40.48a4 4 0 00-4-4H109.5a4 4 0 00-4 4v40.44a4.34 4.34 0 004 4M172.9 178.57H218a4.16 4.16 0 004-4v-40.48a4 4 0 00-4-4h-45.1a4 4 0 00-4 4v40.44a4 4 0 004 4M235.36 178.57h45.12a4.16 4.16 0 004-4v-40.48a4.16 4.16 0 00-4-4h-45.12a4 4 0 00-4 4v40.44a4.16 4.16 0 004 4M235.36 120.53h45.12a4 4 0 004-4V76a4.16 4.16 0 00-4-4h-45.12a4 4 0 00-4 4v40.44a4.17 4.17 0 004 4M298.28 236.37h45.12a4 4 0 004-4v-40.48a4 4 0 00-4-4h-45.12a4 4 0 00-4 4v40.44a4.16 4.16 0 004 4" }));
   function DockerBadge({ server }) {
@@ -73,10 +73,10 @@ var SabaExtDocker = (() => {
     } }, DOCKER_SVG);
   }
 
-  // ../../saba-chan-extensions/docker/gui/src/DockerMiniGauge.js
+  // src/DockerMiniGauge.js
   var import_react3 = __toESM(require_react());
 
-  // ../../saba-chan-extensions/docker/gui/src/MemoryGauge.js
+  // src/MemoryGauge.js
   var import_react2 = __toESM(require_react());
   function MemoryGauge({ percent = 0, usage, size = 100, compact = false }) {
     const pct = Math.min(100, Math.max(0, percent));
@@ -355,7 +355,7 @@ var SabaExtDocker = (() => {
     )));
   }
 
-  // ../../saba-chan-extensions/docker/gui/src/DockerMiniGauge.js
+  // src/DockerMiniGauge.js
   function DockerMiniGauge({ server }) {
     const isDocker = server?.extension_data?.docker_enabled;
     if (!isDocker) return null;
@@ -374,7 +374,7 @@ var SabaExtDocker = (() => {
     );
   }
 
-  // ../../saba-chan-extensions/docker/gui/src/DockerStatsRow.js
+  // src/DockerStatsRow.js
   var import_react4 = __toESM(require_react());
   function DockerStatsRow({ server }) {
     const isDocker = server?.extension_data?.docker_enabled;
@@ -414,7 +414,7 @@ var SabaExtDocker = (() => {
     } }, dockerStats.cpu_percent.toFixed(1), "%")));
   }
 
-  // ../../saba-chan-extensions/docker/gui/src/DockerProvision.js
+  // src/DockerProvision.js
   var import_react5 = __toESM(require_react());
   var CHECK_ICON = /* @__PURE__ */ import_react5.default.createElement("svg", { viewBox: "0 0 24 24", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "3", strokeLinecap: "round", strokeLinejoin: "round" }, /* @__PURE__ */ import_react5.default.createElement("polyline", { points: "20 6 9 17 4 12" }));
   var SPINNER_ICON = /* @__PURE__ */ import_react5.default.createElement("svg", { viewBox: "0 0 24 24", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", className: "spin" }, /* @__PURE__ */ import_react5.default.createElement("path", { d: "M21 12a9 9 0 1 1-6.219-8.56" }));
@@ -437,11 +437,11 @@ var SabaExtDocker = (() => {
     })), /* @__PURE__ */ import_react5.default.createElement("div", { className: "as-provision-bar" }, provisionProgress?.percent != null && !provisionProgress?.done && !provisionProgress?.error ? /* @__PURE__ */ import_react5.default.createElement("div", { className: "as-provision-bar-fill determinate", style: { width: `${provisionProgress.percent}%` } }) : /* @__PURE__ */ import_react5.default.createElement("div", { className: `as-provision-bar-fill ${provisionProgress?.error ? "error" : provisionProgress?.done ? "done" : "indeterminate"}` })), provisionProgress?.message && /* @__PURE__ */ import_react5.default.createElement("p", { className: "as-provision-message" }, provisionProgress.message, provisionProgress?.percent != null && !provisionProgress?.done && !provisionProgress?.error && /* @__PURE__ */ import_react5.default.createElement("span", { className: "as-provision-pct" }, " (", provisionProgress.percent, "%)")), provisionProgress?.error && /* @__PURE__ */ import_react5.default.createElement("div", { className: "as-provision-error-row" }, /* @__PURE__ */ import_react5.default.createElement("p", { className: "as-provision-error" }, provisionProgress.error), /* @__PURE__ */ import_react5.default.createElement("button", { className: "as-provision-dismiss", onClick: onDismiss }, translate("common.dismiss", { defaultValue: "Dismiss" }))));
   }
 
-  // ../../saba-chan-extensions/docker/gui/src/DockerTab.js
+  // src/DockerTab.js
   var import_react6 = __toESM(require_react());
   var DOCKER_ICON = /* @__PURE__ */ import_react6.default.createElement("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 512 512", width: "16", height: "16", style: { verticalAlign: "middle" } }, /* @__PURE__ */ import_react6.default.createElement("path", { fill: "currentColor", d: "M507 211.16c-1.42-1.19-14.25-10.94-41.79-10.94a132.55 132.55 0 00-21.61 1.9c-5.22-36.4-35.38-54-36.57-55l-7.36-4.28-4.75 6.9a101.65 101.65 0 00-13.06 30.45c-5 20.7-1.9 40.2 8.55 56.85-12.59 7.14-33 8.8-37.28 9H15.94A15.93 15.93 0 000 262.07a241.25 241.25 0 0014.75 86.83C26.39 379.35 43.72 402 66 415.74 91.22 431.2 132.3 440 178.6 440a344.23 344.23 0 0062.45-5.71 257.44 257.44 0 0081.69-29.73 223.55 223.55 0 0055.57-45.67c26.83-30.21 42.74-64 54.38-94h4.75c29.21 0 47.26-11.66 57.23-21.65a63.31 63.31 0 0015.2-22.36l2.14-6.18z" }));
   var LIGHTBULB_ICON = /* @__PURE__ */ import_react6.default.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "currentColor", style: { verticalAlign: "middle" } }, /* @__PURE__ */ import_react6.default.createElement("path", { d: "M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7zM9 21v-1h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1z" }));
-  function DockerTab({ server, activeTab, setActiveTab, settings, onSettingsChange, t }) {
+  function DockerTab({ server, settings, onSettingsChange, t }) {
     const isDocker = server?.extension_data?.docker_enabled;
     if (!isDocker) return null;
     const translate = t || ((key, opts) => opts?.defaultValue || key);
@@ -451,16 +451,7 @@ var SabaExtDocker = (() => {
     const updateExtData = (key, value) => {
       onSettingsChange("_extension_data", { ...extData, [key]: value });
     };
-    return /* @__PURE__ */ import_react6.default.createElement(import_react6.default.Fragment, null, /* @__PURE__ */ import_react6.default.createElement(
-      "button",
-      {
-        className: `settings-tab ${activeTab === "docker" ? "active" : ""}`,
-        onClick: () => setActiveTab("docker")
-      },
-      DOCKER_ICON,
-      " ",
-      translate("server_settings.docker_tab", { defaultValue: "Docker" })
-    ), activeTab === "docker" && /* @__PURE__ */ import_react6.default.createElement("div", { className: "settings-form", style: { position: "absolute", top: 0, left: 0, right: 0 } }, /* @__PURE__ */ import_react6.default.createElement("div", { className: "settings-group" }, /* @__PURE__ */ import_react6.default.createElement("h4", { className: "settings-group-title" }, DOCKER_ICON, " ", translate("server_settings.docker_resources_title", { defaultValue: "Resource Limits" })), /* @__PURE__ */ import_react6.default.createElement("p", { className: "protocol-mode-description" }, translate("server_settings.docker_resources_desc", { defaultValue: "Configure CPU and memory limits for this Docker container. Changes will regenerate docker-compose.yml." })), /* @__PURE__ */ import_react6.default.createElement("div", { className: "settings-field" }, /* @__PURE__ */ import_react6.default.createElement("label", null, translate("server_settings.docker_cpu_limit_label", { defaultValue: "CPU Limit (cores)" })), /* @__PURE__ */ import_react6.default.createElement(
+    return /* @__PURE__ */ import_react6.default.createElement("div", { className: "settings-form" }, /* @__PURE__ */ import_react6.default.createElement("div", { className: "settings-group" }, /* @__PURE__ */ import_react6.default.createElement("h4", { className: "settings-group-title" }, DOCKER_ICON, " ", translate("server_settings.docker_resources_title", { defaultValue: "Resource Limits" })), /* @__PURE__ */ import_react6.default.createElement("p", { className: "protocol-mode-description" }, translate("server_settings.docker_resources_desc", { defaultValue: "Configure CPU and memory limits for this Docker container. Changes will regenerate docker-compose.yml." })), /* @__PURE__ */ import_react6.default.createElement("div", { className: "settings-field" }, /* @__PURE__ */ import_react6.default.createElement("label", null, translate("server_settings.docker_cpu_limit_label", { defaultValue: "CPU Limit (cores)" })), /* @__PURE__ */ import_react6.default.createElement(
       "input",
       {
         type: "number",
@@ -479,10 +470,10 @@ var SabaExtDocker = (() => {
         onChange: (e) => updateExtData("docker_memory_limit", e.target.value || null),
         placeholder: translate("server_settings.docker_memory_limit_placeholder", { defaultValue: "e.g., 4g, 512m (no limit if empty)" })
       }
-    ), /* @__PURE__ */ import_react6.default.createElement("small", { className: "field-description" }, translate("server_settings.docker_memory_limit_desc", { defaultValue: "Memory limit with unit (e.g., 512m, 2g, 4g). Leave empty for no limit." })))), /* @__PURE__ */ import_react6.default.createElement("div", { className: "protocol-mode-section protocol-mode-info", style: { marginTop: "16px" } }, /* @__PURE__ */ import_react6.default.createElement("p", { className: "protocol-mode-hint" }, /* @__PURE__ */ import_react6.default.createElement("span", { className: "hint-icon" }, LIGHTBULB_ICON), translate("server_settings.docker_restart_hint", { defaultValue: "Resource limit changes take effect after restarting the server." })))));
+    ), /* @__PURE__ */ import_react6.default.createElement("small", { className: "field-description" }, translate("server_settings.docker_memory_limit_desc", { defaultValue: "Memory limit with unit (e.g., 512m, 2g, 4g). Leave empty for no limit." })))), /* @__PURE__ */ import_react6.default.createElement("div", { className: "protocol-mode-section protocol-mode-info", style: { marginTop: "16px" } }, /* @__PURE__ */ import_react6.default.createElement("p", { className: "protocol-mode-hint" }, /* @__PURE__ */ import_react6.default.createElement("span", { className: "hint-icon" }, LIGHTBULB_ICON), translate("server_settings.docker_restart_hint", { defaultValue: "Resource limit changes take effect after restarting the server." }))));
   }
 
-  // ../../saba-chan-extensions/docker/gui/src/DockerToggle.js
+  // src/DockerToggle.js
   var import_react7 = __toESM(require_react());
   var PACKAGE_ICON = /* @__PURE__ */ import_react7.default.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "2", style: { verticalAlign: "middle" } }, /* @__PURE__ */ import_react7.default.createElement("path", { d: "M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" }), /* @__PURE__ */ import_react7.default.createElement("polyline", { points: "3.27 6.96 12 12.01 20.73 6.96" }), /* @__PURE__ */ import_react7.default.createElement("line", { x1: "12", y1: "22.08", x2: "12", y2: "12" }));
   function DockerToggle({ options, onOptionsChange, t }) {
@@ -512,7 +503,7 @@ var SabaExtDocker = (() => {
     ), /* @__PURE__ */ import_react7.default.createElement("span", { className: "as-toggle-track" })), /* @__PURE__ */ import_react7.default.createElement("div", { className: "as-toggle-info" }, /* @__PURE__ */ import_react7.default.createElement("span", { className: "as-toggle-title" }, PACKAGE_ICON, " ", translate("add_server_modal.docker_isolation", { defaultValue: "Docker Isolation" })), /* @__PURE__ */ import_react7.default.createElement("span", { className: "as-toggle-desc" }, useContainer ? translate("add_server_modal.docker_isolation_hint_on", { defaultValue: "Server will run inside a Docker container for isolation." }) : translate("add_server_modal.docker_isolation_hint_off", { defaultValue: "Server will run natively on the host system." })))));
   }
 
-  // ../../saba-chan-extensions/docker/gui/src/index.js
+  // src/index.js
   function registerSlots() {
     return {
       "ServerCard.badge": [DockerBadge],
@@ -525,4 +516,3 @@ var SabaExtDocker = (() => {
   }
   return __toCommonJS(index_exports);
 })();
-if(typeof window!==undefined){window.SabaExtDocker=SabaExtDocker;}

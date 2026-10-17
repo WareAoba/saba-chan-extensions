@@ -290,7 +290,7 @@ def main() -> None:
             "dependencies": meta["dependencies"],
             "asset": asset_name,
             "sha256": sha256,
-            "install_dir": f"extensions/{ext_id}",
+            "install_dir": f"extensions/{ext_id.replace('-', '_')}",
             "download_url": f"https://github.com/{GITHUB_REPO}/releases/latest/download/{asset_name}",
             "has_gui": meta["has_gui"],
             "has_i18n": meta["has_i18n"],

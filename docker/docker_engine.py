@@ -10,13 +10,11 @@ because Linux game-server container images need a Linux kernel.
 
 On **Linux**, Docker runs natively via downloaded static binaries.
 
-This extension is called by the Rust daemon when an instance uses
-``use_docker: true`` in its configuration.
+Hooks (manifest.json):
+    daemon.startup → ``startup`` (가벼운 확인만, 무거운 설치는 프로비저닝 때)
 
-Usage (standalone):
-    python -m extensions.docker_engine            # prints JSON status
-    python extensions/docker_engine.py status      # same via plugin proto
-    python extensions/docker_engine.py ensure      # download + start daemon
+compose_manager.py가 같은 익스텐션 안에서 이 모듈을 import해 사용한다
+(``ensure``, 경로·상태 파일, ``_run_cli`` 프로토콜 헬퍼).
 """
 
 from __future__ import annotations
@@ -24,13 +22,12 @@ from __future__ import annotations
 import json
 import os
 import platform
-import shutil
-import signal
 import stat
 import subprocess
 import sys
 import tarfile
 import time
+import traceback
 import urllib.request
 from pathlib import Path
 from typing import Any, Optional
@@ -93,45 +90,62 @@ def _creation_flags() -> int:
     return 0
 
 
-def _progress(percent: int, message: str) -> None:
-    """Emit a structured progress line on stderr for the Rust daemon to parse."""
-    import json as _json
-    line = _json.dumps({"percent": percent, "message": message}, ensure_ascii=True)
+def _progress(percent: int | None = None, message: str | None = None, **extra: Any) -> None:
+    """PROGRESS 프로토콜로 진행률 보고 (stderr).
+
+    *extra* 는 Rust ExtensionProgress의 확장 필드(step/total/label/steps)다.
+    값이 None인 필드는 보내지 않는다.
+    """
+    info = {"percent": percent, "message": message, **extra}
+    line = json.dumps({k: v for k, v in info.items() if v is not None}, ensure_ascii=True)
     print(f"PROGRESS:{line}", file=sys.stderr, flush=True)
 
 
 def _download(url: str, dest: Path, *, timeout: int = 300, label: str = "") -> None:
     """Download a file from *url* to *dest* with progress reporting."""
     _log(f"Downloading {url}")
+    dest.parent.mkdir(parents=True, exist_ok=True)
     req = urllib.request.Request(url, headers={"User-Agent": "saba-chan/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    downloaded = 0
+    with urllib.request.urlopen(req, timeout=timeout) as resp, open(dest, "wb") as out:
         total = int(resp.headers.get("Content-Length", 0))
-        if total > 0:
-            # Chunked download with progress
-            chunks: list[bytes] = []
-            downloaded = 0
-            chunk_size = 256 * 1024  # 256 KB
-            last_pct = -1
-            while True:
-                chunk = resp.read(chunk_size)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-                downloaded += len(chunk)
+        last_pct = -1
+        while True:
+            chunk = resp.read(256 * 1024)
+            if not chunk:
+                break
+            out.write(chunk)
+            downloaded += len(chunk)
+            if total > 0:
                 pct = min(int(downloaded * 100 / total), 100)
                 if pct != last_pct:
-                    dl_mb = downloaded / 1_048_576
-                    total_mb = total / 1_048_576
-                    msg = f"{label or dest.name}: {dl_mb:.1f}/{total_mb:.1f} MB" if label else f"{dl_mb:.1f}/{total_mb:.1f} MB"
-                    _progress(pct, msg)
+                    sizes = f"{downloaded / 1_048_576:.1f}/{total / 1_048_576:.1f} MB"
+                    _progress(pct, f"{label}: {sizes}" if label else sizes)
                     last_pct = pct
-            data = b"".join(chunks)
-        else:
-            data = resp.read()
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(data)
-    mb = len(data) / 1_048_576
-    _log(f"Downloaded {mb:.1f} MB -> {dest.name}")
+    _log(f"Downloaded {downloaded / 1_048_576:.1f} MB -> {dest.name}")
+
+
+def _extract_engine_tar(archive: Path, dest: Path) -> None:
+    """Docker static tgz의 ``docker/`` 하위 파일을 *dest* 에 푼다.
+
+    경로가 *dest* 밖을 가리키는 항목, 링크·장치 파일은 거부한다 (tar-slip 방지).
+    """
+    dest = dest.resolve()
+    with tarfile.open(archive, "r:gz") as tf:
+        selected = []
+        for member in tf.getmembers():
+            if not member.name.startswith("docker/"):
+                continue
+            member.name = member.name[len("docker/"):]
+            if not member.name:
+                continue
+            target = (dest / member.name).resolve()
+            if dest not in target.parents:
+                raise ValueError(f"Archive member escapes target directory: {member.name}")
+            if not (member.isfile() or member.isdir()):
+                raise ValueError(f"Unsupported archive member type: {member.name}")
+            selected.append(member)
+        tf.extractall(dest, members=selected)
 
 
 def _check_log_for_fatal(text: str) -> Optional[str]:
@@ -222,6 +236,41 @@ def _wsl_read_log_tail(lines: int = 20) -> str:
         return ""
 
 
+# ── 데이터 경로 (데몬 updater constants와 같은 규칙) ─────────────
+
+def _data_dir() -> Path:
+    """saba-chan 데이터 디렉터리: SABA_DATA_DIR → %APPDATA%/saba-chan → ~/.config/saba-chan."""
+    override = os.environ.get("SABA_DATA_DIR", "")
+    if override:
+        return Path(override)
+    if _SYSTEM == "Windows" and os.environ.get("APPDATA"):
+        return Path(os.environ["APPDATA"]) / "saba-chan"
+    if os.environ.get("HOME"):
+        return Path(os.environ["HOME"]) / ".config" / "saba-chan"
+    return Path(".") / "saba-chan"
+
+
+def _instances_dir() -> Path:
+    """인스턴스 저장 디렉터리: SABA_INSTANCES_PATH → <data_dir>/instances."""
+    override = os.environ.get("SABA_INSTANCES_PATH", "")
+    return Path(override) if override else _data_dir() / "instances"
+
+
+def _has_docker_instances() -> bool:
+    """docker_enabled 인스턴스가 하나라도 있는지 instance.json으로 확인한다."""
+    root = _instances_dir()
+    if not root.is_dir():
+        return False
+    for meta in root.glob("*/instance.json"):
+        try:
+            data = json.loads(meta.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if (data.get("extension_data") or {}).get("docker_enabled"):
+            return True
+    return False
+
+
 # ── Portable directory ───────────────────────────────────────────
 
 def _portable_dir() -> Path:
@@ -236,14 +285,28 @@ def _portable_dir() -> Path:
     script_parent = Path(__file__).resolve().parent.parent
     if (script_parent / "saba-core.exe").exists() or (script_parent / "saba-core").exists():
         return script_parent / "docker"
-    if _SYSTEM == "Windows":
-        appdata = os.environ.get("APPDATA", "")
-        if appdata:
-            return Path(appdata) / "saba-chan" / "docker"
-    home = os.environ.get("HOME", "")
-    if home:
-        return Path(home) / ".config" / "saba-chan" / "docker"
-    return Path(".") / "docker"
+    return _data_dir() / "docker"
+
+
+_STATE_FILE = "engine-state.json"
+
+
+def load_engine_state() -> dict[str, Any]:
+    """마지막 ensure 결과(wsl_mode 등). 없거나 깨졌으면 빈 dict."""
+    try:
+        return json.loads((_portable_dir() / _STATE_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_engine_state(state: dict[str, Any]) -> None:
+    """ensure 결과를 저장한다. compose_manager는 별도 프로세스이므로 이 파일로 모드를 공유한다."""
+    path = _portable_dir() / _STATE_FILE
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(state), encoding="utf-8")
+    except OSError as e:
+        _log(f"Failed to save engine state: {e}")
 
 
 # ── Core Class ───────────────────────────────────────────────────
@@ -429,16 +492,13 @@ class DockerEngine:
         archive = self._dir / "docker.tgz"
         _download(_get_docker_engine_url(), archive, timeout=timeout, label="Docker Engine")
         _log(f"Extracting to {self._dir}")
-        with tarfile.open(archive, "r:gz") as tf:
-            for member in tf.getmembers():
-                if member.name.startswith("docker/"):
-                    member.name = member.name[len("docker/"):]
-                    if member.name:
-                        tf.extract(member, self._dir)
+        try:
+            _extract_engine_tar(archive, self._dir)
+        finally:
+            archive.unlink(missing_ok=True)
         for exe in [self.docker_exe, self.dockerd_exe]:
             if exe.exists():
                 exe.chmod(exe.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-        archive.unlink(missing_ok=True)
         if not self.dockerd_exe.exists():
             raise FileNotFoundError(f"dockerd not found after extraction in {self._dir}")
         _log(f"Docker Engine ready at {self._dir}")
@@ -508,93 +568,37 @@ class DockerEngine:
             raise FileNotFoundError(f"dockerd not found at {self.dockerd_exe}")
         self.data_root.mkdir(parents=True, exist_ok=True)
 
-        # 1차: 일반 권한으로 시도
         result = self._try_spawn_dockerd()
         if result["started"]:
             # 빠른 활성 체크 — 3초 내 fatal 로그 감지
             time.sleep(3)
             if self._daemon_running():
                 return result
-            # fatal 로그 확인
-            fatal = None
             if self.log_file.exists():
                 fatal = _check_log_for_fatal(self.log_file.read_text(errors="replace"))
-            if fatal and ("access is denied" in fatal.lower() or "required service" in fatal.lower()):
-                _log(f"dockerd failed with privilege error: {fatal}")
-                _log("Retrying with elevated (admin) privileges...")
-                elevated = self._try_spawn_dockerd_elevated()
-                if elevated["started"]:
-                    return elevated
-                return {"started": False, "reason": "elevation_failed",
-                        "error": f"dockerd requires admin privileges: {fatal}"}
-            if fatal:
-                return {"started": False, "reason": "daemon_fatal", "error": fatal}
+                if fatal:
+                    return {"started": False, "reason": "daemon_fatal", "error": fatal}
         return result
 
     def _try_spawn_dockerd(self) -> dict[str, Any]:
         """일반 권한으로 dockerd를 직접 Popen 스폰."""
         args = [str(self.dockerd_exe), "--data-root", str(self.data_root)]
         _log(f"Spawning: {' '.join(args)}")
+        # log_fh는 자식 프로세스가 자신의 fd 복사본을 갖게 되므로 부모는
+        # Popen 호출 직후 close 해야 한다. close 하지 않으면 dockerd 재시작 때마다
+        # 데몬 프로세스의 fd가 계속 누적되어 OS 한도에 도달할 수 있다.
         log_fh = open(self.log_file, "a")
-        kwargs: dict[str, Any] = {
-            "stdout": log_fh, "stderr": log_fh,
-            "start_new_session": True,
-        }
-        proc = subprocess.Popen(args, **kwargs)
+        try:
+            kwargs: dict[str, Any] = {
+                "stdout": log_fh, "stderr": log_fh,
+                "start_new_session": True,
+            }
+            proc = subprocess.Popen(args, creationflags=_creation_flags(), **kwargs)
+        finally:
+            log_fh.close()
         self._pid_file.write_text(str(proc.pid))
         _log(f"dockerd spawned (PID {proc.pid})")
         return {"started": True, "pid": proc.pid}
-
-    def _try_spawn_dockerd_elevated(self) -> dict[str, Any]:
-        """Windows UAC 프롬프트를 통해 관리자 권한으로 dockerd를 실행.
-
-        ShellExecuteW('runas') 로 helper 스크립트를 실행하여
-        UAC 대화 상자를 사용자에게 표시합니다.
-        사용자가 승인하면 dockerd가 관리자 권한으로 시작됩니다.
-        """
-        if _SYSTEM != "Windows":
-            return {"started": False, "reason": "elevation_not_supported"}
-
-        # helper 스크립트 생성 — dockerd를 시작하고 PID를 기록
-        helper_script = self._dir / "_elevated_start.bat"
-        pid_out = self._pid_file
-        log_path = self.log_file
-        script_content = (
-            f'@echo off\r\n'
-            f'"{self.dockerd_exe}" --data-root "{self.data_root}" '
-            f'>> "{log_path}" 2>&1 &\r\n'
-            f'for /f "tokens=2" %%a in (\'tasklist /fi "imagename eq dockerd.exe" '
-            f'/fo list ^| findstr "PID:"\') do (\r\n'
-            f'  echo %%a > "{pid_out}"\r\n'
-            f')\r\n'
-        )
-        helper_script.write_text(script_content, encoding="utf-8")
-
-        try:
-            import ctypes
-            _log("Requesting UAC elevation for dockerd...")
-            ret = ctypes.windll.shell32.ShellExecuteW(
-                None, "runas", str(helper_script), None, str(self._dir), 0  # SW_HIDE
-            )
-            # ShellExecuteW returns > 32 on success
-            if ret > 32:
-                _log(f"UAC elevation accepted (ShellExecute returned {ret})")
-                # 스크립트 실행 후 PID 파일이 작성될 때까지 대기
-                for _ in range(10):
-                    time.sleep(1)
-                    pid = self._read_pid()
-                    if pid and self._daemon_running():
-                        _log(f"Elevated dockerd running (PID {pid})")
-                        return {"started": True, "pid": pid, "elevated": True}
-                _log("Elevated dockerd did not start in time")
-                return {"started": False, "reason": "elevation_timeout"}
-            else:
-                reason = "denied" if ret == 5 else f"error_code_{ret}"
-                _log(f"UAC elevation failed (returned {ret})")
-                return {"started": False, "reason": reason}
-        except Exception as e:
-            _log(f"UAC elevation error: {e}")
-            return {"started": False, "reason": "elevation_error", "error": str(e)}
 
     def _wsl_start_daemon(self) -> dict[str, Any]:
         if _wsl_daemon_running():
@@ -711,55 +715,6 @@ exec {_WSL2_DIR}/dockerd \\
             time.sleep(3)
         return False
 
-    def stop_daemon(self) -> dict[str, Any]:
-        if self.wsl_mode:
-            return self._wsl_stop_daemon()
-        return self._native_stop_daemon()
-
-    def _native_stop_daemon(self) -> dict[str, Any]:
-        pid = self._read_pid()
-        if pid is None:
-            return {"stopped": False, "reason": "no_pid_file"}
-        try:
-            os.kill(pid, signal.SIGTERM)
-            for _ in range(10):
-                try:
-                    os.kill(pid, 0)
-                except OSError:
-                    break
-                time.sleep(1)
-            self._pid_file.unlink(missing_ok=True)
-            _log(f"dockerd (PID {pid}) stopped")
-            return {"stopped": True, "pid": pid}
-        except Exception as e:
-            return {"stopped": False, "error": str(e), "pid": pid}
-
-    def _wsl_stop_daemon(self) -> dict[str, Any]:
-        # The PID stored in _pid_file is the Windows-side wsl.exe wrapper.
-        # Killing it tears down the WSL session and stops dockerd+containerd.
-        pid = self._read_pid()  # Windows PID from host-side file
-        if pid is None:
-            # Fallback: try to kill dockerd inside WSL directly
-            _wsl_run(["sh", "-c", "pkill -x dockerd 2>/dev/null; pkill -x containerd 2>/dev/null"],
-                      root=True, timeout=10)
-            _wsl_run(["rm", "-f", _WSL2_PID], root=True)
-            return {"stopped": True, "reason": "killed_via_pkill"}
-        try:
-            subprocess.run(
-                ["taskkill", "/F", "/PID", str(pid)],
-                capture_output=True, timeout=10,
-                creationflags=_creation_flags(),
-            )
-            self._pid_file.unlink(missing_ok=True)
-            _wsl_run(["rm", "-f", _WSL2_PID], root=True)
-            # Also clean up any orphans
-            _wsl_run(["sh", "-c", "pkill -x dockerd 2>/dev/null; pkill -x containerd 2>/dev/null"],
-                      root=True, timeout=10)
-            _log(f"WSL2 Docker session stopped (Win PID {pid})")
-            return {"stopped": True, "pid": pid}
-        except Exception as e:
-            return {"stopped": False, "error": str(e), "pid": pid}
-
     # ── PID helpers ──────────────────────────────────────────
 
     def _read_pid(self) -> Optional[int]:
@@ -794,7 +749,6 @@ exec {_WSL2_DIR}/dockerd \\
                 "compose_exe": f"{_WSL2_DIR}/docker-compose",
                 "pid": self._wsl_read_pid(),
             }
-        docker = str(self.docker_exe) if self.docker_exe.exists() else "docker"
         return {
             "wsl_mode": False,
             "binaries_ready": self.binaries_ready,
@@ -807,53 +761,25 @@ exec {_WSL2_DIR}/dockerd \\
             "pid": self._read_pid(),
         }
 
-    def info(self) -> dict[str, Any]:
-        versions: dict[str, Optional[str]] = {
-            "docker_version": None,
-            "compose_version": None,
-        }
-        if self.wsl_mode:
-            try:
-                r = _wsl_run([f"{_WSL2_DIR}/docker", "--version"], root=True, timeout=10)
-                if r.returncode == 0:
-                    versions["docker_version"] = r.stdout.decode(errors="replace").strip()
-            except Exception:
-                pass
-            try:
-                r = _wsl_run([f"{_WSL2_DIR}/docker-compose", "version"], root=True, timeout=10)
-                if r.returncode == 0:
-                    versions["compose_version"] = r.stdout.decode(errors="replace").strip()
-            except Exception:
-                pass
-        else:
-            docker = str(self.docker_exe) if self.docker_exe.exists() else "docker"
-            try:
-                r = subprocess.run(
-                    [docker, "--version"], capture_output=True, text=True,
-                    timeout=10, creationflags=_creation_flags(),
-                )
-                if r.returncode == 0:
-                    versions["docker_version"] = r.stdout.strip()
-            except Exception:
-                pass
-            compose = str(self.compose_exe) if self.compose_exe.exists() else None
-            if compose:
-                try:
-                    r = subprocess.run(
-                        [compose, "version"], capture_output=True, text=True,
-                        timeout=10, creationflags=_creation_flags(),
-                    )
-                    if r.returncode == 0:
-                        versions["compose_version"] = r.stdout.strip()
-                except Exception:
-                    pass
-        return {**self.status(), **versions}
-
-
 # ── Plugin Runner Interface ──────────────────────────────────────
 
-def _plugin_ensure(config: dict) -> dict:
-    """Download binaries + start daemon + wait for readiness."""
+def ensure(config: dict) -> dict:
+    """Docker 데몬을 사용할 수 있게 만든다 (필요 시 다운로드 → 시작 → 대기).
+
+    config:
+      base_dir        포터블 디렉터리 (기본: _portable_dir())
+      allow_download  False면 바이너리가 없을 때 다운로드하지 않고 실패로 보고한다
+      timeout / wait_timeout  다운로드·준비 대기 제한 시간(초)
+
+    결과의 ``wsl_mode`` 는 상태 파일에 저장된다. compose_manager는 이 값으로 CLI를 고른다.
+    """
+    result = _ensure(config)
+    if result.get("daemon_ready"):
+        save_engine_state({"wsl_mode": bool(result.get("wsl_mode"))})
+    return result
+
+
+def _ensure(config: dict) -> dict:
     engine = DockerEngine(config.get("base_dir"))
 
     # 0. Check if system Docker (Docker Desktop etc.) is already running
@@ -882,6 +808,7 @@ def _plugin_ensure(config: dict) -> dict:
         return {
             "success": False,
             "message": display_msg,
+            "error": display_msg,
             "daemon_ready": False,
             "needs_reboot": "REBOOT" in tag,
             "wsl_mode": engine.wsl_mode,
@@ -889,6 +816,15 @@ def _plugin_ensure(config: dict) -> dict:
 
     # 3. Download if needed
     if not engine.binaries_ready:
+        if not config.get("allow_download", True):
+            message = "Docker Engine is not installed yet; it will be installed when a Docker server is provisioned or started"
+            return {
+                "success": True,
+                "message": message,
+                "daemon_ready": False,
+                "deferred": True,
+                "wsl_mode": engine.wsl_mode,
+            }
         engine.ensure_available(timeout=config.get("timeout", 300))
 
     # 4. Start daemon
@@ -905,15 +841,14 @@ def _plugin_ensure(config: dict) -> dict:
         if engine.log_file.exists():
             try:
                 log_tail = engine.log_file.read_text(errors="replace")
-            except Exception:
+            except OSError:
                 pass
 
     fatal = _check_log_for_fatal(log_tail) if not ready else None
-
-    if fatal and not ready:
-        message = f"Docker daemon start failed: {fatal}"
-    elif ready:
+    if ready:
         message = "Docker Engine ready"
+    elif fatal:
+        message = f"Docker daemon start failed: {fatal}"
     else:
         message = "dockerd started but did not respond in time"
 
@@ -921,73 +856,59 @@ def _plugin_ensure(config: dict) -> dict:
         "success": ready,
         "message": message,
         "daemon_ready": ready,
-        "wsl_mode": engine.wsl_mode,
         **engine.status(),
     }
-
-    if not ready and log_tail:
-        lines = log_tail.splitlines()
-        result["dockerd_log_tail"] = "\n".join(lines[-20:])
-
+    if not ready:
+        result["error"] = message
+        if log_tail:
+            result["dockerd_log_tail"] = "\n".join(log_tail.splitlines()[-20:])
     return result
 
 
-def _plugin_start_daemon(config: dict) -> dict:
-    engine = DockerEngine(config.get("base_dir"))
-    result = engine.start_daemon()
-    started_or_running = result.get("started") or result.get("reason") == "already_running"
-    if started_or_running:
-        ready = engine.wait_for_ready(timeout_secs=config.get("wait_timeout", 60))
-        return {"success": ready, "daemon_ready": ready, "wsl_mode": engine.wsl_mode, **result}
-    return {"success": False, "daemon_ready": False, "wsl_mode": engine.wsl_mode, **result}
+def startup(config: dict) -> dict:
+    """daemon.startup — 가벼운 확인만 한다.
 
-
-def _plugin_stop_daemon(config: dict) -> dict:
-    engine = DockerEngine(config.get("base_dir"))
-    result = engine.stop_daemon()
-    return {"success": result.get("stopped", False), **result}
-
-
-def _plugin_status(config: dict) -> dict:
-    engine = DockerEngine(config.get("base_dir"))
-    return {"success": True, **engine.status()}
-
-
-def _plugin_info(config: dict) -> dict:
-    engine = DockerEngine(config.get("base_dir"))
-    return {"success": True, **engine.info()}
+    docker_enabled 인스턴스가 없으면 아무것도 하지 않는다. 있으면 이미 설치된 엔진만
+    시작하고, 엔진 다운로드는 server.post_create(provision)·server.pre_start(start)로 미룬다.
+    """
+    if not _has_docker_instances():
+        return {"success": True, "message": "No Docker instances; Docker Engine check skipped"}
+    return ensure({**config, "allow_download": False})
 
 
 FUNCTIONS = {
-    "ensure": _plugin_ensure,
-    "start_daemon": _plugin_start_daemon,
-    "stop_daemon": _plugin_stop_daemon,
-    "status": _plugin_status,
-    "info": _plugin_info,
+    "startup": startup,
+    # 수동 진단용
+    "ensure": ensure,
 }
 
 
-# ── CLI ──────────────────────────────────────────────────────────
+def _error_result(message: str) -> dict:
+    return {"success": False, "error": message, "message": message}
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        engine = DockerEngine()
-        print(json.dumps(engine.info(), indent=2))
-        sys.exit(0)
 
-    function_name = sys.argv[1]
-    fn = FUNCTIONS.get(function_name)
-    if fn is None:
-        result = {"success": False, "message": f"Unknown function: {function_name}"}
+def _run_cli(functions: dict, argv: list[str], stdin, *, error_extra: dict | None = None) -> int:
+    """플러그인 프로토콜 실행: ``<script> <function>`` + stdin JSON → stdout JSON 1개.
+
+    데몬은 0이 아닌 종료 코드를 Err로 처리하고 stdout을 버린다. 따라서 실패도
+    ``{"success": false, "error", "message"}`` (+ *error_extra*) 로 출력하고 0으로 종료한다.
+    traceback은 stderr로 보낸다 (데몬 debug 로그).
+    """
+    if len(argv) < 2:
+        result = {**_error_result("No function specified"), **(error_extra or {})}
+    elif argv[1] not in functions:
+        result = {**_error_result(f"Unknown function: {argv[1]}"), **(error_extra or {})}
     else:
         try:
-            input_data = sys.stdin.read()
-            # Strip UTF-8 BOM if present (PowerShell may inject one)
-            if input_data.startswith("\ufeff"):
-                input_data = input_data[1:]
-            config_data = json.loads(input_data) if input_data.strip() else {}
-            result = fn(config_data)
+            raw = stdin.read().lstrip("﻿")  # PowerShell BOM 제거
+            config = json.loads(raw) if raw.strip() else {}
+            result = functions[argv[1]](config)
         except Exception as e:
-            result = {"success": False, "message": str(e)}
+            traceback.print_exc(file=sys.stderr)
+            result = {**_error_result(str(e) or type(e).__name__), **(error_extra or {})}
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
 
-    json.dump(result, sys.stdout, ensure_ascii=True)
+
+if __name__ == "__main__":
+    sys.exit(_run_cli(FUNCTIONS, sys.argv, sys.stdin))

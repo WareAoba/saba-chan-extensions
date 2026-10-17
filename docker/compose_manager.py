@@ -533,7 +533,6 @@ def container_stats(config: dict) -> dict:
     
     반환: docker_memory_usage, docker_memory_percent, docker_cpu_percent
     """
-    ext_data = config.get("extension_data", {})
     instance_dir = config.get("instance_dir", "")
     
     # 먼저 컨테이너 이름 파악
@@ -751,9 +750,7 @@ def provision(config: dict) -> dict:
     Rust: docker_provision() (M8)
     3단계: Docker 엔진 확인 → SteamCMD 설치 → compose 생성
     """
-    instance_id = config.get("instance_id", "")
     instance_dir = config.get("instance_dir", "")
-    ext_data = config.get("extension_data") or {}
     module_config = config.get("module_install") or {}
 
     # ── Step 0: Docker Engine 확인 ──

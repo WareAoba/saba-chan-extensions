@@ -9,7 +9,7 @@ daemon.startup 훅으로 실행됩니다.
   extensions/music/node_modules/  — npm install 결과물
   포터블 바이너리                  — ffmpeg, yt-dlp (AppData/saba-chan 내)
 
-실제 음악 재생 로직은 discord_bot/extensions/music.js (Node.js) 에 있습니다.
+실제 음악 재생 로직은 클라우드 릴레이 서버(server-chan/music-server)에서 제공합니다.
 """
 
 import ctypes

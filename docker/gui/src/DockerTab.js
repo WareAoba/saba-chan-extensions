@@ -17,15 +17,17 @@ const LIGHTBULB_ICON = (
 );
 
 /**
- * DockerTab 내용 + 탭 버튼 렌더링
+ * DockerTab — Docker 리소스 제한 설정 섹션.
+ *
+ * 서버 설정 모달의 탭 헤더가 제거되면서(단일 페이지化) 탭 버튼 없이
+ * 일반 설정 아래에 항상 표시되는 섹션으로 렌더링한다.
  * Props:
  *   server: 서버 인스턴스
- *   activeTab / setActiveTab: 현재 설정 탭 상태
  *   settings: 현재 설정 값 (settingsValues)
  *   onSettingsChange: 설정 변경 핸들러 (handleSettingChange)
  *   t: i18n 번역 함수
  */
-export default function DockerTab({ server, activeTab, setActiveTab, settings, onSettingsChange, t }) {
+export default function DockerTab({ server, settings, onSettingsChange, t }) {
   const isDocker = server?.extension_data?.docker_enabled;
   if (!isDocker) return null;
 
@@ -39,19 +41,8 @@ export default function DockerTab({ server, activeTab, setActiveTab, settings, o
   };
 
   return (
-    <>
-      {/* 탭 버튼 */}
-      <button
-        className={`settings-tab ${activeTab === 'docker' ? 'active' : ''}`}
-        onClick={() => setActiveTab('docker')}
-      >
-        {DOCKER_ICON} {translate('server_settings.docker_tab', { defaultValue: 'Docker' })}
-      </button>
-
-      {/* 탭 내용 */}
-      {activeTab === 'docker' && (
-        <div className="settings-form" style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
-          <div className="settings-group">
+    <div className="settings-form">
+      <div className="settings-group">
             <h4 className="settings-group-title">
               {DOCKER_ICON} {translate('server_settings.docker_resources_title', { defaultValue: 'Resource Limits' })}
             </h4>
@@ -98,8 +89,6 @@ export default function DockerTab({ server, activeTab, setActiveTab, settings, o
               {translate('server_settings.docker_restart_hint', { defaultValue: 'Resource limit changes take effect after restarting the server.' })}
             </p>
           </div>
-        </div>
-      )}
-    </>
+    </div>
   );
 }

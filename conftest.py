@@ -18,7 +18,6 @@ if _parent not in sys.path:
     sys.path.insert(0, _parent)
 
 # 'extensions' 패키지로 매핑: saba-chan-extensions → extensions
-import importlib
 import types
 
 if 'extensions' not in sys.modules:
