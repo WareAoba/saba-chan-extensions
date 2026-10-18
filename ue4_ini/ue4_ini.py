@@ -97,6 +97,21 @@ def parse_option_settings(ini_path):
         return {}
 
 
+def _is_group(value):
+    """`(`로 열어 맨 끝의 `)`로 닫히는 값만 그룹이다 — "(KR) Friends"는 그룹이 아니다."""
+    if not value.startswith("("):
+        return False
+    depth = 0
+    for i, ch in enumerate(value):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i == len(value) - 1
+    return False
+
+
 def _should_quote(value):
     """Determine if a value needs quoting in UE4 INI OptionSettings.
 
@@ -105,7 +120,7 @@ def _should_quote(value):
     """
     if not isinstance(value, str):
         return False
-    if value.startswith("("):
+    if _is_group(value):
         return False
     if value in ("True", "False"):
         return False
