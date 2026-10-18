@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "ue4-ini",
   "name": "UE4 INI Parser",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Reads and writes OptionSettings in Unreal Engine 4 INI files",
   "descriptions": { "ko": "Unreal Engine 4 INI 파일의 OptionSettings 파싱 및 기록" },
   "author": "WareAoba",
