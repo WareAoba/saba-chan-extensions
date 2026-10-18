@@ -539,6 +539,7 @@ class _FakeProc:
         self._polls_left = finish_after
         self.returncode = None
         self.killed = False
+        self.pid = 4242424
 
     def poll(self):
         if self.killed:
@@ -564,6 +565,8 @@ def fake_steamcmd(tmp_path, monkeypatch):
     exe = tmp_path / "steamcmd.exe"
     exe.write_text("")
     monkeypatch.setattr(steamcmd_mod, "_POLL_INTERVAL", 0)
+    # 실제 프로세스 트리 종료는 test_timeout_kill_reaches_grandchildren이 본다
+    monkeypatch.setattr(steamcmd_mod, "_kill_tree", lambda proc: proc.kill())
     calls = []
 
     def install_with(proc, **kwargs):
@@ -606,6 +609,32 @@ def test_install_kills_steamcmd_on_timeout(fake_steamcmd):
     assert result["success"] is False
     assert "timed out" in result["message"]
     fix.assert_not_called()
+
+
+@pytest.mark.skipif(not os.path.isdir("/proc"), reason="Linux 프로세스 트리(/proc)")
+def test_timeout_kill_reaches_grandchildren(tmp_path):
+    """steamcmd.sh가 띄운 실제 steamcmd(손자)까지 끝낸다."""
+    import subprocess
+    import time
+    pidfile = tmp_path / "pid"
+    proc = subprocess.Popen(["sh", "-c", f"sleep 30 & echo $! > {pidfile}; wait"])
+    for _ in range(100):
+        if pidfile.exists() and pidfile.read_text().strip():
+            break
+        time.sleep(0.05)
+    grandchild = int(pidfile.read_text())
+    steamcmd_mod._kill_tree(proc)
+    proc.wait(timeout=5)
+    for _ in range(100):
+        try:
+            os.kill(grandchild, 0)
+        except ProcessLookupError:
+            break
+        if open(f"/proc/{grandchild}/stat").read().split()[2] == "Z":
+            break
+        time.sleep(0.05)
+    else:
+        pytest.fail("grandchild still running")
 
 
 def test_app_info_print_decodes_utf8_with_replace(tmp_path, monkeypatch):

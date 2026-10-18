@@ -398,7 +398,7 @@ class SteamCMD:
                     heartbeat_counter = 0
 
             if timed_out:
-                proc.kill()
+                _kill_tree(proc)
                 proc.wait(timeout=10)
                 _log(f"SteamCMD timed out after {timeout} s for app {app_id}; process killed")
                 return {
@@ -768,6 +768,70 @@ def _creation_flags() -> int:
     if _SYSTEM == "Windows":
         return 0x08000000  # CREATE_NO_WINDOW
     return 0
+
+
+def _children_map() -> dict[int, list[int]]:
+    """부모 pid → 자식 pid. Linux는 /proc에서 바로 읽고, 없으면(macOS) ps를 쓴다."""
+    pairs: list[tuple[int, int]] = []
+    if os.path.isdir("/proc"):
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                with open(f"/proc/{entry}/stat", encoding="utf-8", errors="replace") as f:
+                    # comm에 공백·괄호가 들어갈 수 있어 마지막 ')' 뒤에서 읽는다: state ppid ...
+                    ppid = int(f.read().rsplit(")", 1)[1].split()[1])
+            except (OSError, ValueError, IndexError):
+                continue
+            pairs.append((ppid, int(entry)))
+    else:
+        try:
+            out = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            out = ""
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                pairs.append((int(parts[1]), int(parts[0])))
+    children: dict[int, list[int]] = {}
+    for ppid, pid in pairs:
+        children.setdefault(ppid, []).append(pid)
+    return children
+
+
+def _descendants(pid: int) -> list[int]:
+    """*pid* 아래 모든 자손 pid (POSIX)."""
+    children = _children_map()
+    found: list[int] = []
+    queue = [pid]
+    while queue:
+        kids = children.get(queue.pop(), [])
+        found.extend(kids)
+        queue.extend(kids)
+    return found
+
+
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """steamcmd와 그 자손을 모두 끝낸다.
+
+    Linux/macOS의 steamcmd.sh는 실제 steamcmd를 자식으로 띄우므로 직계 자식만 죽이면
+    손자가 남아 install_dir에 계속 쓴다. 데몬의 프로세스 그룹 종료가 닿도록 새 세션은 만들지 않는다.
+    """
+    if _SYSTEM == "Windows":
+        try:
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                           capture_output=True, timeout=10, creationflags=_creation_flags())
+        except (OSError, subprocess.SubprocessError):
+            pass
+        proc.kill()
+        return
+    descendants = _descendants(proc.pid)
+    proc.kill()
+    for pid in descendants:
+        try:
+            os.kill(pid, 9)
+        except OSError:
+            pass
 
 
 def _download_bytes(url: str, *, timeout: int) -> bytes:
