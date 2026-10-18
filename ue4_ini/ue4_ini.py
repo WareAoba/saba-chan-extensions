@@ -71,15 +71,8 @@ def parse_option_settings(ini_path):
                     i += 1
             elif i < len(raw) and raw[i] == '(':
                 # Parenthesized value like CrossplayPlatforms=(Steam,Xbox)
-                depth = 1
                 start = i
-                i += 1
-                while i < len(raw) and depth > 0:
-                    if raw[i] == '(':
-                        depth += 1
-                    elif raw[i] == ')':
-                        depth -= 1
-                    i += 1
+                i = min(_group_end(raw, start), len(raw))
                 value = raw[start:i]
                 if i < len(raw) and raw[i] == ',':
                     i += 1
@@ -101,15 +94,31 @@ def _is_group(value):
     """`(`로 열어 맨 끝의 `)`로 닫히는 값만 그룹이다 — "(KR) Friends"는 그룹이 아니다."""
     if not value.startswith("("):
         return False
+    return _group_end(value, 0) == len(value)
+
+
+def _group_end(raw, start):
+    """raw[start]의 `(`와 짝인 `)` 바로 뒤 위치. 따옴표 안의 괄호와 이스케이프는 세지 않는다 (짝이 없으면 len(raw) + 1)."""
     depth = 0
-    for i, ch in enumerate(value):
-        if ch == "(":
+    quoted = False
+    i = start
+    while i < len(raw):
+        ch = raw[i]
+        if quoted:
+            if ch == "\\":
+                i += 1
+            elif ch == '"':
+                quoted = False
+        elif ch == '"':
+            quoted = True
+        elif ch == "(":
             depth += 1
         elif ch == ")":
             depth -= 1
             if depth == 0:
-                return i == len(value) - 1
-    return False
+                return i + 1
+        i += 1
+    return len(raw) + 1
 
 
 def _should_quote(value):

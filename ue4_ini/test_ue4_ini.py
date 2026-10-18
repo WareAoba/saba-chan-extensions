@@ -250,8 +250,9 @@ def test_write_keeps_crlf_line_endings(tmp_path):
 def test_write_quotes_names_that_only_start_with_a_parenthesis(tmp_path):
     path = str(tmp_path / "Settings.ini")
     props = {"ServerName": "(KR) Friends", "ServerDescription": "hi", "CrossplayPlatforms": "(Steam,Xbox)",
-             "Odd": "(a)(b)", "Open": "(unclosed"}
+             "Odd": "(a)(b)", "Open": "(unclosed", "Rule": '(Name="foo)",Value=1)'}
     write_option_settings(path, props)
     assert parse_option_settings(path) == props
     text = open(path, encoding="utf-8").read()
     assert 'ServerName="(KR) Friends"' in text and "CrossplayPlatforms=(Steam,Xbox)" in text
+    assert 'Rule=(Name="foo)",Value=1)' in text

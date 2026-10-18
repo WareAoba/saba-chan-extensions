@@ -770,18 +770,44 @@ def _creation_flags() -> int:
     return 0
 
 
+def _children_map() -> dict[int, list[int]]:
+    """부모 pid → 자식 pid. Linux는 /proc에서 바로 읽고, 없으면(macOS) ps를 쓴다."""
+    pairs: list[tuple[int, int]] = []
+    if os.path.isdir("/proc"):
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                with open(f"/proc/{entry}/stat", encoding="utf-8", errors="replace") as f:
+                    # comm에 공백·괄호가 들어갈 수 있어 마지막 ')' 뒤에서 읽는다: state ppid ...
+                    ppid = int(f.read().rsplit(")", 1)[1].split()[1])
+            except (OSError, ValueError, IndexError):
+                continue
+            pairs.append((ppid, int(entry)))
+    else:
+        try:
+            out = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            out = ""
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                pairs.append((int(parts[1]), int(parts[0])))
+    children: dict[int, list[int]] = {}
+    for ppid, pid in pairs:
+        children.setdefault(ppid, []).append(pid)
+    return children
+
+
 def _descendants(pid: int) -> list[int]:
-    """*pid* 아래 모든 자손 pid (POSIX, pgrep -P). 찾을 수 없으면 빈 목록."""
+    """*pid* 아래 모든 자손 pid (POSIX)."""
+    children = _children_map()
     found: list[int] = []
     queue = [pid]
     while queue:
-        try:
-            out = subprocess.run(["pgrep", "-P", str(queue.pop())], capture_output=True, text=True, timeout=5).stdout
-        except (OSError, subprocess.SubprocessError):
-            break
-        children = [int(x) for x in out.split() if x.isdigit()]
-        found.extend(children)
-        queue.extend(children)
+        kids = children.get(queue.pop(), [])
+        found.extend(kids)
+        queue.extend(kids)
     return found
 
 

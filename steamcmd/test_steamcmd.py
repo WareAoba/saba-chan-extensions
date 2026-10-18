@@ -565,7 +565,8 @@ def fake_steamcmd(tmp_path, monkeypatch):
     exe = tmp_path / "steamcmd.exe"
     exe.write_text("")
     monkeypatch.setattr(steamcmd_mod, "_POLL_INTERVAL", 0)
-    monkeypatch.setattr(steamcmd_mod, "_descendants", lambda pid: [])
+    # 실제 프로세스 트리 종료는 test_timeout_kill_reaches_grandchildren이 본다
+    monkeypatch.setattr(steamcmd_mod, "_kill_tree", lambda proc: proc.kill())
     calls = []
 
     def install_with(proc, **kwargs):
