@@ -53,6 +53,8 @@ _STEAMCMD_URLS: dict[str, str] = {
 _EXE_NAME = "steamcmd.exe" if _SYSTEM == "Windows" else "steamcmd.sh"
 
 _PORTABLE_SUBDIR = "steamcmd"
+# 다시 돌려도 풀리지 않는 설치 실패 (종료 코드 8)
+_PERMANENT_FAILURES = ("Disk write failure", "Not enough disk space", "Invalid platform", "No subscription")
 
 # 설치 전체 제한 시간. 데몬의 install_server 타임아웃(1800초)보다 짧게 잡아
 # 데몬이 Python을 죽이기 전에 steamcmd를 직접 종료한다 (고아 프로세스 방지).
@@ -438,13 +440,17 @@ class SteamCMD:
                     "app_id": app_id,
                 }
 
-            # Exit code 7: SteamCMD self-updated or transient failure -- retry
-            if returncode == 7 and attempt < max_attempts:
-                _log(f"SteamCMD exited with code 7 (attempt {attempt}) -- retrying...")
+            # Exit code 7: SteamCMD self-updated or transient failure -- retry.
+            # Exit code 8: 첫 실행의 'Missing configuration' 등은 다시 돌리면 풀린다 (영구 원인은 빼고)
+            permanent = any(reason in stdout for reason in _PERMANENT_FAILURES)
+            if (returncode == 7 or (returncode == 8 and not permanent)) and attempt < max_attempts:
+                _log(f"SteamCMD exited with code {returncode} (attempt {attempt}) -- retrying...")
                 time.sleep(3)
                 continue
 
-            detail = stdout[:2000]
+            # 앞부분은 배너라 원인이 잘린다: 마지막 ERROR! 줄을 보이고, 없으면 끝부분을 보인다
+            errors = [line.strip() for line in stdout.splitlines() if line.strip().upper().startswith("ERROR!")]
+            detail = errors[-1] if errors else stdout[-2000:]
             _log(f"SteamCMD failed for app {app_id}: {detail}")
             return {
                 "success": False,
