@@ -754,3 +754,30 @@ def test_with_a_daemon_root_only_the_portable_copy_is_used(tmp_path, monkeypatch
     assert SteamCMD._detect() == system
     monkeypatch.setenv("SABA_EXTENSION_DATA_ROOT", str(tmp_path / "root"))
     assert SteamCMD._detect() is None
+
+
+def test_install_retries_a_transient_exit_8_but_not_a_full_disk(tmp_path, monkeypatch):
+    """깨끗한 PC의 첫 설치에서 흔한 'Missing configuration'(종료 코드 8)은 한 번 더 돌리면 풀린다.
+    디스크 쓰기 실패 같은 영구 원인은 다시 돌리지 않고, 실패 메시지에 마지막 ERROR! 줄을 보인다"""
+    exe = tmp_path / "steamcmd.exe"
+    exe.write_text("")
+    monkeypatch.setattr(steamcmd_mod, "_POLL_INTERVAL", 0)
+    monkeypatch.setattr(steamcmd_mod.time, "sleep", lambda s: None)
+
+    def run(procs):
+        queue = list(procs)
+        calls = []
+        monkeypatch.setattr(steamcmd_mod.subprocess, "Popen", lambda args, **kw: calls.append(args) or queue.pop(0))
+        with patch.object(SteamCMD, "_fix_local_buildid"):
+            return SteamCMD(explicit_path=str(exe)).install(380870, tmp_path / "server"), len(calls)
+
+    banner = b"Redirecting stderr to 'logs/stderr.txt'\n" * 200
+    result, runs = run([
+        _FakeProc(banner + b"ERROR! Failed to install app '380870' (Missing configuration)\n", returncode=8),
+        _FakeProc(b"Success! App '380870' fully installed.\n"),
+    ])
+    assert (result["success"], runs) == (True, 2)
+
+    result, runs = run([_FakeProc(banner + b"Error! App '380870' state is 0x202 after update job.\nERROR! Failed to install app '380870' (Disk write failure)\n", returncode=8)])
+    assert (result["success"], runs) == (False, 1)
+    assert "Disk write failure" in result["message"]

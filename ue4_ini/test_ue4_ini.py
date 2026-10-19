@@ -6,6 +6,8 @@ import json
 import os
 import tempfile
 
+import pytest
+
 from extensions.ue4_ini import parse_option_settings, write_option_settings
 
 
@@ -256,3 +258,57 @@ def test_write_quotes_names_that_only_start_with_a_parenthesis(tmp_path):
     text = open(path, encoding="utf-8").read()
     assert 'ServerName="(KR) Friends"' in text and "CrossplayPlatforms=(Steam,Xbox)" in text
     assert 'Rule=(Name="foo)",Value=1)' in text
+
+
+def test_files_saved_in_the_windows_locale_or_utf16_are_read_and_kept(tmp_path, monkeypatch):
+    """메모장 등으로 ANSI(cp949)·UTF-16으로 저장한 INI도 읽고, 쓸 때 원래 인코딩을 지킨다
+    (예전에는 UnicodeDecodeError로 서버 시작·설정 읽기가 실패했다)"""
+    from extensions.ue4_ini import ue4_ini
+    # 영문 Windows(cp1252)에서도 cp949 파일을 cp1252로 잘못 읽지 않는다 (cp1252는 거의 모든 바이트를 받는다)
+    monkeypatch.setattr(ue4_ini.locale, "getpreferredencoding", lambda do_setlocale=True: "cp1252")
+    body = '[/Script/Pal.PalGameWorldSettings]\r\nOptionSettings=(ServerName="한글서버",AdminPassword="x")\r\n'
+    for encoding, raw in [("cp949", body.encode("cp949")), ("utf-16", body.encode("utf-16"))]:
+        ini = tmp_path / f"{encoding}.ini"
+        ini.write_bytes(raw)
+        assert parse_option_settings(str(ini))["ServerName"] == "한글서버", encoding
+        assert write_option_settings(str(ini), {"ServerName": "새 서버", "AdminPassword": "x"})
+        assert ini.read_bytes().decode(encoding).count("새 서버") == 1, encoding
+        assert parse_option_settings(str(ini))["ServerName"] == "새 서버", encoding
+
+
+def test_a_failed_write_leaves_the_old_file_whole(tmp_path, monkeypatch):
+    """쓰기는 임시 파일에 한 뒤 바꾼다: 중간에 실패해도 원래 파일이 비지 않는다"""
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName="old")\n', encoding="utf-8")
+
+    def broken(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(os, "replace", broken)
+    assert write_option_settings(str(ini), {"ServerName": "new"}) is False
+    assert parse_option_settings(str(ini))["ServerName"] == "old"
+    assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"], "no temp file is left"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX 권한 비트")
+def test_a_write_keeps_the_file_permissions(tmp_path):
+    """비밀번호가 든 INI를 0600으로 둔 경우, 바꿔 쓴 뒤에도 다른 사용자가 읽을 수 없어야 한다"""
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
+    os.chmod(ini, 0o600)
+    assert write_option_settings(str(ini), {"AdminPassword": "y"})
+    assert ini.stat().st_mode & 0o777 == 0o600
+
+
+def test_a_write_through_a_symlink_updates_the_real_file(tmp_path):
+    """설정 경로가 링크면 링크를 일반 파일로 바꾸지 않고 링크가 가리키는 파일을 고친다"""
+    real = tmp_path / "real.ini"
+    real.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName="old")\n', encoding="utf-8")
+    link = tmp_path / "link.ini"
+    try:
+        os.symlink(real, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not available")
+    assert write_option_settings(str(link), {"ServerName": "new"})
+    assert link.is_symlink()
+    assert parse_option_settings(str(real))["ServerName"] == "new"

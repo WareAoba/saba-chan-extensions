@@ -16,8 +16,30 @@ Usage:
 라이브러리 전용 익스텐션이다 — 데몬 훅이 없고 모듈이 in-process로 import한다.
 """
 
+import locale
 import os
 import re
+import shutil
+
+
+def _read_text(ini_path):
+    """파일 내용과 그 인코딩. BOM으로 UTF-16·UTF-8을 가리고, 없으면 UTF-8 → cp949 → 시스템 로캘 순서로 읽는다
+    (메모장 등으로 ANSI·UTF-16 저장한 파일). cp949가 로캘보다 먼저다: 영문 Windows의 cp1252는 거의 모든 바이트를
+    받아 한글 파일을 깨진 글자로 읽는다. 어느 것도 아니면 latin-1로 바이트를 그대로 지킨다"""
+    with open(ini_path, "rb") as f:
+        raw = f.read()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        candidates = ["utf-16"]
+    elif raw.startswith(b"\xef\xbb\xbf"):
+        candidates = ["utf-8-sig"]
+    else:
+        candidates = ["utf-8", "cp949", locale.getpreferredencoding(False)]
+    for encoding in candidates + ["latin-1"]:
+        try:
+            return raw.decode(encoding), encoding
+        except (UnicodeDecodeError, LookupError):
+            continue
+    raise AssertionError("latin-1 decodes any bytes")
 
 
 def parse_option_settings(ini_path):
@@ -41,8 +63,7 @@ def parse_option_settings(ini_path):
     if not os.path.isfile(ini_path):
         return {}
     try:
-        with open(ini_path, "r", encoding="utf-8-sig") as f:
-            content = f.read()
+        content, _ = _read_text(ini_path)
         m = re.search(r'OptionSettings=\((.+)\)', content)
         if not m:
             return {}
@@ -200,24 +221,38 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
     """
     header = section if section.startswith("[") else f"[{section}]"
     option_line = _format_option_settings(props)
+    # 링크면 가리키는 파일을 고친다 (교체가 링크를 일반 파일로 바꾸지 않게)
+    ini_path = os.path.realpath(ini_path)
     try:
         os.makedirs(os.path.dirname(ini_path) or ".", exist_ok=True)
         lines = []
         encoding = "utf-8"
         newline = "\n"
         if os.path.isfile(ini_path):
-            with open(ini_path, "rb") as f:
-                raw = f.read()
-            # BOM이 있으면 떼고 읽어야 첫 줄 헤더가 맞는다. 쓸 때는 BOM을 되살린다
-            if raw.startswith(b"\xef\xbb\xbf"):
-                encoding = "utf-8-sig"
-            # 줄바꿈도 원래 파일을 따른다 (새 파일은 LF)
-            if b"\r\n" in raw:
+            # 원래 인코딩(BOM 포함)과 줄바꿈을 따른다 (새 파일은 UTF-8, LF)
+            content, encoding = _read_text(ini_path)
+            if "\r\n" in content:
                 newline = "\r\n"
-            lines = raw.decode(encoding).splitlines()
+            lines = content.splitlines()
         lines = _merge_option_settings(lines, header, option_line)
-        with open(ini_path, "w", encoding=encoding, newline="") as f:
-            f.write(newline.join(lines) + newline)
+        text = newline.join(lines) + newline
+        try:
+            data = text.encode(encoding)
+        except UnicodeEncodeError:
+            # 원래 인코딩에 없는 글자(예: latin-1 파일에 한글): BOM 붙은 UTF-8로 바꿔 쓴다
+            data = text.encode("utf-8-sig")
+        # 임시 파일에 쓴 뒤 바꾼다: 중간에 실패해도 원래 파일이 비지 않는다
+        tmp = f"{ini_path}.saba-tmp"
+        try:
+            with open(tmp, "wb") as f:
+                f.write(data)
+            # 원래 권한(비밀번호가 든 파일의 0600 등)을 지킨다
+            if os.path.isfile(ini_path):
+                shutil.copymode(ini_path, tmp)
+            os.replace(tmp, ini_path)
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
         return True
     except OSError:
         return False
