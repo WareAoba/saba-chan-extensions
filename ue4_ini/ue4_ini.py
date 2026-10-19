@@ -19,11 +19,13 @@ Usage:
 import locale
 import os
 import re
+import shutil
 
 
 def _read_text(ini_path):
-    """파일 내용과 그 인코딩. BOM으로 UTF-16·UTF-8을 가리고, 없으면 UTF-8 → 시스템 로캘 → cp949 순서로 읽는다
-    (메모장 등으로 ANSI·UTF-16 저장한 파일). 어느 것도 아니면 latin-1로 바이트를 그대로 지킨다"""
+    """파일 내용과 그 인코딩. BOM으로 UTF-16·UTF-8을 가리고, 없으면 UTF-8 → cp949 → 시스템 로캘 순서로 읽는다
+    (메모장 등으로 ANSI·UTF-16 저장한 파일). cp949가 로캘보다 먼저다: 영문 Windows의 cp1252는 거의 모든 바이트를
+    받아 한글 파일을 깨진 글자로 읽는다. 어느 것도 아니면 latin-1로 바이트를 그대로 지킨다"""
     with open(ini_path, "rb") as f:
         raw = f.read()
     if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
@@ -31,7 +33,7 @@ def _read_text(ini_path):
     elif raw.startswith(b"\xef\xbb\xbf"):
         candidates = ["utf-8-sig"]
     else:
-        candidates = ["utf-8", locale.getpreferredencoding(False), "cp949"]
+        candidates = ["utf-8", "cp949", locale.getpreferredencoding(False)]
     for encoding in candidates + ["latin-1"]:
         try:
             return raw.decode(encoding), encoding
@@ -219,6 +221,8 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
     """
     header = section if section.startswith("[") else f"[{section}]"
     option_line = _format_option_settings(props)
+    # 링크면 가리키는 파일을 고친다 (교체가 링크를 일반 파일로 바꾸지 않게)
+    ini_path = os.path.realpath(ini_path)
     try:
         os.makedirs(os.path.dirname(ini_path) or ".", exist_ok=True)
         lines = []
@@ -242,6 +246,9 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
         try:
             with open(tmp, "wb") as f:
                 f.write(data)
+            # 원래 권한(비밀번호가 든 파일의 0600 등)을 지킨다
+            if os.path.isfile(ini_path):
+                shutil.copymode(ini_path, tmp)
             os.replace(tmp, ini_path)
         finally:
             if os.path.exists(tmp):
