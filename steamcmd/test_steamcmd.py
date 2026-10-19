@@ -742,3 +742,15 @@ def test_portable_dir_follows_the_daemon_extension_data_root(tmp_path, monkeypat
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     assert _real_portable_dir().name == "steamcmd"
+
+
+def test_with_a_daemon_root_only_the_portable_copy_is_used(tmp_path, monkeypatch):
+    """격리 실행은 Program Files 사본을 읽을 수는 있어도 스스로 업데이트할 수 없다.
+    데몬이 뿌리를 주면 시스템 사본을 고르지 않는다."""
+    system = tmp_path / "SteamCMD" / steamcmd_mod._EXE_NAME
+    system.parent.mkdir(parents=True)
+    system.write_bytes(b"x")
+    monkeypatch.setattr(steamcmd_mod, "_common_candidates", lambda: [system])
+    assert SteamCMD._detect() == system
+    monkeypatch.setenv("SABA_EXTENSION_DATA_ROOT", str(tmp_path / "root"))
+    assert SteamCMD._detect() is None

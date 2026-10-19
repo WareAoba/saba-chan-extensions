@@ -191,6 +191,10 @@ class SteamCMD:
         except EnvironmentError:
             pass
 
+        # 데몬이 뿌리를 주면 그 아래 사본만 쓴다 (격리 실행은 시스템 사본을 스스로 업데이트할 수 없다)
+        if os.environ.get("SABA_EXTENSION_DATA_ROOT"):
+            return None
+
         # 2) Common install locations
         for candidate in _common_candidates():
             if candidate.exists():
