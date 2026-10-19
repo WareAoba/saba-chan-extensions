@@ -107,10 +107,16 @@ def _dir_size(path: Path) -> int:
 def _portable_dir() -> Path:
     """Return the directory used by saba-chan's portable SteamCMD.
 
+    데몬이 준 ``SABA_EXTENSION_DATA_ROOT/steamcmd`` (격리된 실행은 구성요소마다 다른 뿌리를 받는다).
+    없으면 (옛 데몬):
+
     Windows : ``%APPDATA%/saba-chan/steamcmd``
     Linux   : ``~/.config/saba-chan/steamcmd``
     macOS   : ``~/.config/saba-chan/steamcmd``
     """
+    root = os.environ.get("SABA_EXTENSION_DATA_ROOT", "")
+    if root:
+        return Path(root) / _PORTABLE_SUBDIR
     if _SYSTEM == "Windows":
         base = os.environ.get("APPDATA", "")
         if not base:

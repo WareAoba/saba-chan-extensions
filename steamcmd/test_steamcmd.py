@@ -17,6 +17,7 @@ from extensions.steamcmd import SteamCMD
 from extensions.steamcmd import steamcmd as steamcmd_mod
 
 MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "manifest.json")
+_real_portable_dir = steamcmd_mod._portable_dir
 
 
 @pytest.fixture(autouse=True)
@@ -730,3 +731,14 @@ def test_check_update_flags_a_branch_switch_even_to_an_older_build(tmp_path):
         })
     assert result["local_branch"] == "unstable"
     assert result["update_available"] is True
+
+
+def test_portable_dir_follows_the_daemon_extension_data_root(tmp_path, monkeypatch):
+    """데몬이 준 뿌리(SABA_EXTENSION_DATA_ROOT) 아래에 받는다.
+    격리된 모듈은 공용 폴더에 쓸 수 없어 설치가 막혔다 (팰월드: 스팀 폴더 액세스 거부)."""
+    monkeypatch.setenv("SABA_EXTENSION_DATA_ROOT", str(tmp_path / "root"))
+    assert _real_portable_dir() == tmp_path / "root" / "steamcmd"
+    monkeypatch.delenv("SABA_EXTENSION_DATA_ROOT")
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    assert _real_portable_dir().name == "steamcmd"
