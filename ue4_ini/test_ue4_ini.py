@@ -258,9 +258,12 @@ def test_write_quotes_names_that_only_start_with_a_parenthesis(tmp_path):
     assert 'Rule=(Name="foo)",Value=1)' in text
 
 
-def test_files_saved_in_the_windows_locale_or_utf16_are_read_and_kept(tmp_path):
+def test_files_saved_in_the_windows_locale_or_utf16_are_read_and_kept(tmp_path, monkeypatch):
     """메모장 등으로 ANSI(cp949)·UTF-16으로 저장한 INI도 읽고, 쓸 때 원래 인코딩을 지킨다
     (예전에는 UnicodeDecodeError로 서버 시작·설정 읽기가 실패했다)"""
+    from extensions.ue4_ini import ue4_ini
+    # ANSI 파일은 시스템 로캘로 읽는다: 한국어 Windows(cp949)를 가정한다
+    monkeypatch.setattr(ue4_ini.locale, "getpreferredencoding", lambda do_setlocale=True: "cp949")
     body = '[/Script/Pal.PalGameWorldSettings]\r\nOptionSettings=(ServerName="한글서버",AdminPassword="x")\r\n'
     for encoding, raw in [("cp949", body.encode("cp949")), ("utf-16", body.encode("utf-16"))]:
         ini = tmp_path / f"{encoding}.ini"
