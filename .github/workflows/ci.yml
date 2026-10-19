@@ -1,10 +1,17 @@
-# saba-chan-extensions — pytest + critical lint (E9, F63, F7, F82)
+# saba-chan-extensions — critical lint (E9, F63, F7, F82) + pytest
+#
+# PR: Windows에서만 돌린다. 익스텐션은 Windows 데몬에서 실행되고,
+#     Ubuntu pytest는 클라우드 작업에서 매번 돌린다.
+# 전체 (Actions 탭 workflow_dispatch): Windows + Ubuntu
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   python:
@@ -12,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: ${{ github.event_name == 'workflow_dispatch' && fromJSON('["windows-latest","ubuntu-latest"]') || fromJSON('["windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
