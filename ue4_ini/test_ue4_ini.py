@@ -376,3 +376,15 @@ def test_a_write_through_a_symlink_updates_the_real_file(tmp_path):
     assert write_option_settings(str(link), {"ServerName": "new"})
     assert link.is_symlink()
     assert parse_option_settings(str(real))["ServerName"] == "new"
+
+
+def test_a_write_first_restores_a_backup_left_by_an_interrupted_replace(tmp_path):
+    """교체가 원래 파일을 백업 이름으로 옮긴 직후 프로세스가 끝났으면, 다음 쓰기는 백업(원래 ACL·설정)을 먼저 되돌린다.
+    새 파일을 만들면 다른 설정이 사라지고 폴더의 상속 권한으로 열린다 (PR #12 리뷰)"""
+    ini = tmp_path / "PalWorldSettings.ini"
+    backup = tmp_path / "PalWorldSettings.ini.saba-bak"
+    backup.write_text('[Other]\nKept=1\n[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
+    assert write_option_settings(str(ini), {"AdminPassword": "y"})
+    assert "[Other]\nKept=1" in ini.read_text(encoding="utf-8")
+    assert parse_option_settings(str(ini))["AdminPassword"] == "y"
+    assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"]

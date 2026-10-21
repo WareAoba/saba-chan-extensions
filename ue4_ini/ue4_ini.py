@@ -225,6 +225,10 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
     ini_path = os.path.realpath(ini_path)
     try:
         os.makedirs(os.path.dirname(ini_path) or ".", exist_ok=True)
+        backup = _backup_path(ini_path)
+        if not os.path.exists(ini_path) and os.path.isfile(backup):
+            # 앞선 교체가 원래 파일을 백업 이름으로 옮긴 채 끝났다: 원래 파일(원래 ACL)부터 되돌린다
+            os.replace(backup, ini_path)
         lines = []
         encoding = "utf-8"
         newline = "\n"
@@ -277,6 +281,10 @@ def _winerror(err):
     return ctypes.WinError(err)
 
 
+def _backup_path(path):
+    return f"{path}.saba-bak"
+
+
 def _replace_file(tmp, path):
     """임시 파일로 원래 파일을 바꾸되 원래 접근 권한을 지킨다 (비밀번호가 든 INI가 넓게 열리지 않게).
     Windows: ReplaceFileW는 원래 파일의 DACL 등을 옮긴다(learn.microsoft.com ReplaceFileW Remarks). 플래그 0이라
@@ -289,7 +297,7 @@ def _replace_file(tmp, path):
         shutil.copymode(path, tmp)
         os.replace(tmp, path)
         return
-    backup = f"{path}.saba-bak"
+    backup = _backup_path(path)
     if os.path.exists(backup):
         os.remove(backup)
     if _replacefilew()(path, tmp, backup, 0, None, None):
