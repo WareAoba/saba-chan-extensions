@@ -310,15 +310,39 @@ def test_windows_replaces_an_existing_file_with_replacefilew(tmp_path, monkeypat
     calls = []
 
     def fake_replacefile(replaced, replacement, backup, flags, exclude, reserved):
-        calls.append((replaced, os.path.basename(replacement), backup, flags))
-        os.replace(replacement, replaced)  # 파일 내용만 흉내 낸다
+        calls.append((replaced, os.path.basename(replacement), os.path.basename(backup), flags))
+        os.replace(replaced, backup)  # 파일 내용만 흉내 낸다
+        os.replace(replacement, replaced)
         return 1
     monkeypatch.setattr(ue4_ini.os, "name", "nt")
     monkeypatch.setattr(ue4_ini, "_replacefilew", lambda: fake_replacefile)
     assert write_option_settings(str(ini), {"AdminPassword": "y"})
     # 플래그 0: ACL을 옮기지 못하면 성공으로 넘어가지 않는다(IGNORE_*_ERRORS를 쓰지 않는다)
-    assert calls == [(os.path.realpath(ini), "PalWorldSettings.ini.saba-tmp", None, 0)]
+    assert calls == [(os.path.realpath(ini), "PalWorldSettings.ini.saba-tmp", "PalWorldSettings.ini.saba-bak", 0)]
     assert parse_option_settings(str(ini))["AdminPassword"] == "y"
+    assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"], "백업을 남기지 않는다"
+
+
+def test_a_failed_replacefilew_keeps_the_original_file_and_its_acl(tmp_path, monkeypatch):
+    """ReplaceFileW가 중간에 실패해도 임시 파일(상속 ACL)이 설정 파일 자리에 가지 않는다. 원래 파일이 백업 이름으로
+    옮겨졌으면(1177) 되돌린다 (learn.microsoft.com ReplaceFileW Return value, PR #11 리뷰)"""
+    from extensions.ue4_ini import ue4_ini
+    ini = tmp_path / "PalWorldSettings.ini"
+    monkeypatch.setattr(ue4_ini.os, "name", "nt")
+
+    for code in (1175, 1176, 1177):
+        ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
+
+        def fake_replacefile(replaced, replacement, backup, flags, exclude, reserved, code=code):
+            if code == 1177:  # 원래 파일은 백업 이름으로, 새 파일은 임시 이름 그대로
+                os.replace(replaced, backup)
+            return 0
+        monkeypatch.setattr(ue4_ini, "_replacefilew", lambda f=fake_replacefile: f)
+        monkeypatch.setattr(ue4_ini, "_last_error", lambda code=code: code)
+        monkeypatch.setattr(ue4_ini, "_winerror", lambda err: OSError(err, "replace failed"))
+        assert write_option_settings(str(ini), {"AdminPassword": "y"}) is False, code
+        assert parse_option_settings(str(ini))["AdminPassword"] == "x", code
+        assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"], code
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows ACL")
@@ -352,3 +376,15 @@ def test_a_write_through_a_symlink_updates_the_real_file(tmp_path):
     assert write_option_settings(str(link), {"ServerName": "new"})
     assert link.is_symlink()
     assert parse_option_settings(str(real))["ServerName"] == "new"
+
+
+def test_a_write_first_restores_a_backup_left_by_an_interrupted_replace(tmp_path):
+    """교체가 원래 파일을 백업 이름으로 옮긴 직후 프로세스가 끝났으면, 다음 쓰기는 백업(원래 ACL·설정)을 먼저 되돌린다.
+    새 파일을 만들면 다른 설정이 사라지고 폴더의 상속 권한으로 열린다 (PR #12 리뷰)"""
+    ini = tmp_path / "PalWorldSettings.ini"
+    backup = tmp_path / "PalWorldSettings.ini.saba-bak"
+    backup.write_text('[Other]\nKept=1\n[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
+    assert write_option_settings(str(ini), {"AdminPassword": "y"})
+    assert "[Other]\nKept=1" in ini.read_text(encoding="utf-8")
+    assert parse_option_settings(str(ini))["AdminPassword"] == "y"
+    assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"]

@@ -225,6 +225,10 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
     ini_path = os.path.realpath(ini_path)
     try:
         os.makedirs(os.path.dirname(ini_path) or ".", exist_ok=True)
+        backup = _backup_path(ini_path)
+        if not os.path.exists(ini_path) and os.path.isfile(backup):
+            # 앞선 교체가 원래 파일을 백업 이름으로 옮긴 채 끝났다: 원래 파일(원래 ACL)부터 되돌린다
+            os.replace(backup, ini_path)
         lines = []
         encoding = "utf-8"
         newline = "\n"
@@ -255,8 +259,8 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
         return False
 
 
-# ReplaceFileW가 이름을 바꾸지 못했고 원래 파일도 없어졌다: 새 내용은 임시 파일 이름으로 남아 있다
-_ERROR_UNABLE_TO_MOVE_REPLACEMENT = 1176
+# ReplaceFileW가 새 파일을 옮기지 못했다: 원래 파일은 백업 이름에, 새 내용은 임시 파일 이름에 남아 있다
+_ERROR_UNABLE_TO_MOVE_REPLACEMENT_2 = 1177
 
 
 def _replacefilew():
@@ -267,10 +271,25 @@ def _replacefilew():
     return fn
 
 
+def _last_error():
+    import ctypes
+    return ctypes.get_last_error()
+
+
+def _winerror(err):
+    import ctypes
+    return ctypes.WinError(err)
+
+
+def _backup_path(path):
+    return f"{path}.saba-bak"
+
+
 def _replace_file(tmp, path):
     """임시 파일로 원래 파일을 바꾸되 원래 접근 권한을 지킨다 (비밀번호가 든 INI가 넓게 열리지 않게).
     Windows: ReplaceFileW는 원래 파일의 DACL 등을 옮긴다(learn.microsoft.com ReplaceFileW Remarks). 플래그 0이라
-    ACL을 옮기지 못하면 실패한다. POSIX: 권한 비트를 옮긴 뒤 os.replace"""
+    ACL을 옮기지 못하면 실패한다. 백업 이름을 주면 어느 단계에서 실패해도 원래 파일이 남는다(Return value):
+    임시 파일(부모 폴더의 상속 ACL)을 설정 파일 자리에 두지 않는다. POSIX: 권한 비트를 옮긴 뒤 os.replace"""
     if not os.path.isfile(path):
         os.replace(tmp, path)
         return
@@ -278,12 +297,17 @@ def _replace_file(tmp, path):
         shutil.copymode(path, tmp)
         os.replace(tmp, path)
         return
-    if _replacefilew()(path, tmp, None, 0, None, None):
+    backup = _backup_path(path)
+    if os.path.exists(backup):
+        os.remove(backup)
+    if _replacefilew()(path, tmp, backup, 0, None, None):
+        try:
+            os.remove(backup)
+        except OSError:
+            pass
         return
-    import ctypes
-    err = ctypes.get_last_error()
-    if err == _ERROR_UNABLE_TO_MOVE_REPLACEMENT and not os.path.exists(path):
-        # 설정 파일이 없어진 채로 두지 않는다: 새 내용을 제자리에 놓는다
-        os.replace(tmp, path)
-        return
-    raise OSError(err, ctypes.FormatError(err), path)
+    err = _last_error()
+    if err == _ERROR_UNABLE_TO_MOVE_REPLACEMENT_2 and not os.path.exists(path) and os.path.isfile(backup):
+        # 원래 파일(원래 ACL)을 제자리로 되돌린다. 새 값은 쓰지 못한 것으로 알린다
+        os.replace(backup, path)
+    raise _winerror(err)
