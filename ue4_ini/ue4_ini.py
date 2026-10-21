@@ -246,13 +246,44 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
         try:
             with open(tmp, "wb") as f:
                 f.write(data)
-            # 원래 권한(비밀번호가 든 파일의 0600 등)을 지킨다
-            if os.path.isfile(ini_path):
-                shutil.copymode(ini_path, tmp)
-            os.replace(tmp, ini_path)
+            _replace_file(tmp, ini_path)
         finally:
             if os.path.exists(tmp):
                 os.remove(tmp)
         return True
     except OSError:
         return False
+
+
+# ReplaceFileW가 이름을 바꾸지 못했고 원래 파일도 없어졌다: 새 내용은 임시 파일 이름으로 남아 있다
+_ERROR_UNABLE_TO_MOVE_REPLACEMENT = 1176
+
+
+def _replacefilew():
+    import ctypes
+    fn = ctypes.WinDLL("kernel32", use_last_error=True).ReplaceFileW
+    fn.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_void_p]
+    fn.restype = ctypes.c_int
+    return fn
+
+
+def _replace_file(tmp, path):
+    """임시 파일로 원래 파일을 바꾸되 원래 접근 권한을 지킨다 (비밀번호가 든 INI가 넓게 열리지 않게).
+    Windows: ReplaceFileW는 원래 파일의 DACL 등을 옮긴다(learn.microsoft.com ReplaceFileW Remarks). 플래그 0이라
+    ACL을 옮기지 못하면 실패한다. POSIX: 권한 비트를 옮긴 뒤 os.replace"""
+    if not os.path.isfile(path):
+        os.replace(tmp, path)
+        return
+    if os.name != "nt":
+        shutil.copymode(path, tmp)
+        os.replace(tmp, path)
+        return
+    if _replacefilew()(path, tmp, None, 0, None, None):
+        return
+    import ctypes
+    err = ctypes.get_last_error()
+    if err == _ERROR_UNABLE_TO_MOVE_REPLACEMENT and not os.path.exists(path):
+        # 설정 파일이 없어진 채로 두지 않는다: 새 내용을 제자리에 놓는다
+        os.replace(tmp, path)
+        return
+    raise OSError(err, ctypes.FormatError(err), path)

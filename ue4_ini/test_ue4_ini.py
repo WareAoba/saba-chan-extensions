@@ -284,7 +284,8 @@ def test_a_failed_write_leaves_the_old_file_whole(tmp_path, monkeypatch):
     def broken(*args, **kwargs):
         raise OSError("disk full")
 
-    monkeypatch.setattr(os, "replace", broken)
+    from extensions.ue4_ini import ue4_ini
+    monkeypatch.setattr(ue4_ini, "_replace_file", broken)
     assert write_option_settings(str(ini), {"ServerName": "new"}) is False
     assert parse_option_settings(str(ini))["ServerName"] == "old"
     assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"], "no temp file is left"
@@ -298,6 +299,45 @@ def test_a_write_keeps_the_file_permissions(tmp_path):
     os.chmod(ini, 0o600)
     assert write_option_settings(str(ini), {"AdminPassword": "y"})
     assert ini.stat().st_mode & 0o777 == 0o600
+
+
+def test_windows_replaces_an_existing_file_with_replacefilew(tmp_path, monkeypatch):
+    """Windows에서 기존 파일은 ReplaceFileW로 바꾼다: 원래 파일의 DACL을 지킨다
+    (learn.microsoft.com ReplaceFileW Remarks). os.replace는 임시 파일의 상속 권한을 그대로 남겨 접근을 넓혔다 (외부 감사 P2)"""
+    from extensions.ue4_ini import ue4_ini
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
+    calls = []
+
+    def fake_replacefile(replaced, replacement, backup, flags, exclude, reserved):
+        calls.append((replaced, os.path.basename(replacement), backup, flags))
+        os.replace(replacement, replaced)  # 파일 내용만 흉내 낸다
+        return 1
+    monkeypatch.setattr(ue4_ini.os, "name", "nt")
+    monkeypatch.setattr(ue4_ini, "_replacefilew", lambda: fake_replacefile)
+    assert write_option_settings(str(ini), {"AdminPassword": "y"})
+    # 플래그 0: ACL을 옮기지 못하면 성공으로 넘어가지 않는다(IGNORE_*_ERRORS를 쓰지 않는다)
+    assert calls == [(os.path.realpath(ini), "PalWorldSettings.ini.saba-tmp", None, 0)]
+    assert parse_option_settings(str(ini))["AdminPassword"] == "y"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows ACL")
+def test_a_write_keeps_a_restricted_windows_acl(tmp_path):
+    """상속을 끊고 지금 사용자만 둔 INI는 바꿔 쓴 뒤에도 같은 ACL이어야 한다 (Users 읽기가 새로 생기지 않는다)"""
+    import subprocess
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
+    sid = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True, check=True).stdout.strip().split(",")[-1].strip('"')
+    subprocess.run(["icacls", str(ini), "/inheritance:r", "/grant:r", f"*{sid}:F"], capture_output=True, check=True)
+
+    def acl():
+        out = subprocess.run(["icacls", str(ini)], capture_output=True, text=True, check=True).stdout
+        # ACE 줄만 비교한다(끝의 처리 결과 줄은 OS 언어로 나온다)
+        return [line.replace(str(ini), "").strip() for line in out.splitlines() if ":(" in line]
+    before = acl()
+    assert write_option_settings(str(ini), {"AdminPassword": "y"})
+    assert acl() == before
+    assert parse_option_settings(str(ini))["AdminPassword"] == "y"
 
 
 def test_a_write_through_a_symlink_updates_the_real_file(tmp_path):
