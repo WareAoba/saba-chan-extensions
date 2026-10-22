@@ -318,7 +318,14 @@ def test_windows_replaces_an_existing_file_with_replacefilew(tmp_path, monkeypat
     monkeypatch.setattr(ue4_ini, "_replacefilew", lambda: fake_replacefile)
     assert write_option_settings(str(ini), {"AdminPassword": "y"})
     # 플래그 0: ACL을 옮기지 못하면 성공으로 넘어가지 않는다(IGNORE_*_ERRORS를 쓰지 않는다)
-    assert calls == [(os.path.realpath(ini), "PalWorldSettings.ini.saba-tmp", "PalWorldSettings.ini.saba-bak", 0)]
+    assert len(calls) == 1
+    replaced, replacement, backup, flags = calls[0]
+    assert (replaced, flags) == (os.path.realpath(ini), 0)
+    # 임시 파일은 저장마다 다른 이름 (남은 임시 파일이나 다른 저장의 것을 덮지 않게).
+    # 백업 이름은 하나로 둔다: 끊긴 교체를 다음 저장이 그 이름으로 찾아 되돌린다
+    assert replacement.startswith("PalWorldSettings.ini.") and replacement.endswith(".saba-tmp")
+    assert replacement != "PalWorldSettings.ini.saba-tmp"
+    assert backup == "PalWorldSettings.ini.saba-bak"
     assert parse_option_settings(str(ini))["AdminPassword"] == "y"
     assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"], "백업을 남기지 않는다"
 

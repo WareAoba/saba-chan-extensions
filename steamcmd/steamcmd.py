@@ -528,7 +528,14 @@ class SteamCMD:
                 rf'\g<1>{remote_buildid}\3',
                 content,
             )
-            manifest_path.write_text(new_content, encoding="utf-8")
+            # 다 쓴 뒤 바꾼다: 쓰다 끊겨도 manifest가 잘린 채 남지 않게
+            tmp_path = manifest_path.with_name(f"{manifest_path.name}.{os.getpid()}.saba-tmp")
+            try:
+                tmp_path.write_text(new_content, encoding="utf-8")
+                os.replace(tmp_path, manifest_path)
+            finally:
+                if tmp_path.exists():
+                    tmp_path.unlink()
             _log(f"Fixed buildid for app {app_id}: {local_buildid} → {remote_buildid}")
 
         except Exception as e:
