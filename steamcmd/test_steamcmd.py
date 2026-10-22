@@ -781,3 +781,41 @@ def test_install_retries_a_transient_exit_8_but_not_a_full_disk(tmp_path, monkey
     result, runs = run([_FakeProc(banner + b"Error! App '380870' state is 0x202 after update job.\nERROR! Failed to install app '380870' (Disk write failure)\n", returncode=8)])
     assert (result["success"], runs) == (False, 1)
     assert "Disk write failure" in result["message"]
+
+
+
+def test_first_install_fits_in_the_daemons_install_limit(monkeypatch):
+    """처음 설치는 SteamCMD 받기(ensure_available)와 설치를 이어서 한다: 받기는 느리게 이어져도 자기 한도에서 끊기고,
+    둘의 한도를 더해도 데몬 install_server 한도(1800초)보다 짧아 데몬이 Python을 먼저 죽이지 않는다"""
+    import inspect
+    bootstrap = inspect.signature(SteamCMD.ensure_available).parameters["timeout"].default
+    install = inspect.signature(SteamCMD.install).parameters["timeout"].default
+    assert bootstrap + steamcmd_mod._READ_TIMEOUT + install < 1800
+
+    clock = [0.0]
+
+    class _Trickle:
+        headers = {"Content-Length": str(1 << 30)}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self, n):
+            clock[0] += steamcmd_mod._READ_TIMEOUT  # 읽기 한 번은 소켓 한도 안에 끝나지만 끝없이 이어진다
+            return b"x"
+
+    monkeypatch.setattr(steamcmd_mod.time, "monotonic", lambda: clock[0])
+    socket_timeouts = []
+
+    def _urlopen(*a, timeout=None, **k):
+        socket_timeouts.append(timeout)
+        return _Trickle()
+
+    monkeypatch.setattr(steamcmd_mod.urllib.request, "urlopen", _urlopen)
+    with pytest.raises(TimeoutError):
+        steamcmd_mod._download_bytes("https://example.invalid/steamcmd.zip", timeout=bootstrap)
+    assert clock[0] <= bootstrap + steamcmd_mod._READ_TIMEOUT
+    assert socket_timeouts == [steamcmd_mod._READ_TIMEOUT]
