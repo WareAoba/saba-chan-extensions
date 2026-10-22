@@ -56,9 +56,14 @@ _PORTABLE_SUBDIR = "steamcmd"
 # 다시 돌려도 풀리지 않는 설치 실패 (종료 코드 8)
 _PERMANENT_FAILURES = ("Disk write failure", "Not enough disk space", "Invalid platform", "No subscription")
 
-# 설치 전체 제한 시간. 데몬의 install_server 타임아웃(1800초)보다 짧게 잡아
-# 데몬이 Python을 죽이기 전에 steamcmd를 직접 종료한다 (고아 프로세스 방지).
-_DEFAULT_INSTALL_TIMEOUT = 1740
+# SteamCMD 자체를 받는 제한 시간 (처음 설치는 이것을 먼저 한다). 읽기 한 번은 _READ_TIMEOUT 안에 끝나야 해서
+# 한도를 넘는 것은 그 한 번만큼이다
+_BOOTSTRAP_TIMEOUT = 120
+_READ_TIMEOUT = 30
+
+# 설치 전체 제한 시간. 처음 설치의 SteamCMD 받기까지 더해도 데몬의 install_server 타임아웃(1800초)보다
+# 짧게 잡아 데몬이 Python을 죽이기 전에 steamcmd를 직접 종료한다 (고아 프로세스 방지).
+_DEFAULT_INSTALL_TIMEOUT = 1740 - _BOOTSTRAP_TIMEOUT - _READ_TIMEOUT
 
 # 설치 진행률 모니터링 주기 (초)
 _POLL_INTERVAL = 2.0
@@ -211,7 +216,7 @@ class SteamCMD:
 
     # ── Auto-bootstrap ───────────────────────────────────────
 
-    def ensure_available(self, *, timeout: int = 120) -> None:
+    def ensure_available(self, *, timeout: int = _BOOTSTRAP_TIMEOUT) -> None:
         """Download and extract a portable SteamCMD if not already present.
 
         After this call :attr:`available` is guaranteed to be ``True`` (or
@@ -857,12 +862,16 @@ def _download_bytes(url: str, *, timeout: int) -> bytes:
     install() 진행률과 혼동하지 않도록 범위를 제한한다.
     """
     req = urllib.request.Request(url, headers={"User-Agent": "saba-chan/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    # urlopen의 timeout은 읽기 한 번의 한도라서, 느리게 이어지는 받기도 전체로 timeout 안에 끊는다
+    deadline = time.monotonic() + timeout
+    with urllib.request.urlopen(req, timeout=min(timeout, _READ_TIMEOUT)) as resp:
         total = int(resp.headers.get("Content-Length", 0))
         chunks: list[bytes] = []
         downloaded = 0
         last_pct = -1
         while True:
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"SteamCMD download did not finish within {timeout}s")
             chunk = resp.read(64 * 1024)
             if not chunk:
                 break
