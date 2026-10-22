@@ -61,9 +61,9 @@ _PERMANENT_FAILURES = ("Disk write failure", "Not enough disk space", "Invalid p
 _BOOTSTRAP_TIMEOUT = 120
 _READ_TIMEOUT = 30
 
-# 설치 전체 제한 시간. 처음 설치의 SteamCMD 받기까지 더해도 데몬의 install_server 타임아웃(1800초)보다
-# 짧게 잡아 데몬이 Python을 죽이기 전에 steamcmd를 직접 종료한다 (고아 프로세스 방지).
-_DEFAULT_INSTALL_TIMEOUT = 1740 - _BOOTSTRAP_TIMEOUT - _READ_TIMEOUT
+# SteamCMD 받기와 설치를 합한 제한 시간. 데몬의 install_server 타임아웃(1800초)보다 짧게 잡아
+# 데몬이 Python을 죽이기 전에 steamcmd를 직접 종료한다 (고아 프로세스 방지). 설치는 같은 객체의 받기가 실제로 쓴 시간만 뺀다
+_INSTALL_BUDGET = 1740
 
 # 설치 진행률 모니터링 주기 (초)
 _POLL_INTERVAL = 2.0
@@ -174,6 +174,8 @@ class SteamCMD:
             self._path: Optional[Path] = Path(explicit_path)
         else:
             self._path = self._detect()
+        # ensure_available이 SteamCMD를 받는 데 쓴 시간 (설치 한도에서 뺀다)
+        self._bootstrap_secs = 0.0
 
     # ── Properties ───────────────────────────────────────────
 
@@ -241,7 +243,11 @@ class SteamCMD:
 
         portable.mkdir(parents=True, exist_ok=True)
 
-        data = _download_bytes(url, timeout=timeout)
+        started = time.monotonic()
+        try:
+            data = _download_bytes(url, timeout=timeout)
+        finally:
+            self._bootstrap_secs += time.monotonic() - started
         _log(f"Downloaded {len(data) / 1_048_576:.1f} MB, extracting …")
         _extract_archive(data, url, portable)
 
@@ -269,11 +275,11 @@ class SteamCMD:
         beta_password: Optional[str] = None,
         platform_override: Optional[str] = None,
         validate: bool = True,
-        timeout: Optional[float] = _DEFAULT_INSTALL_TIMEOUT,
+        timeout: Optional[float] = _INSTALL_BUDGET,
     ) -> dict[str, Any]:
         """Run ``steamcmd +app_update`` to install or update a game server.
 
-        *timeout* 는 재시도를 포함한 전체 제한 시간(초)이다. 넘기면 steamcmd를
+        *timeout* 는 재시도와 이 객체의 SteamCMD 받기를 포함한 전체 제한 시간(초)이다. 넘기면 steamcmd를
         종료하고 실패를 반환한다. ``None`` 이면 제한하지 않는다.
 
         Returns a dict with ``success``, ``message``, ``install_dir``,
@@ -319,6 +325,8 @@ class SteamCMD:
         args.append("+quit")
 
         pct_pattern = re.compile(r"progress:\s*([\d.]+)\s*\((\d+)\s*/\s*(\d+)\)")
+        if timeout is not None:
+            timeout = max(0.0, timeout - self._bootstrap_secs)
         deadline = time.monotonic() + timeout if timeout is not None else None
 
         # SteamCMD commonly exits with code 7 on first run (self-update).
