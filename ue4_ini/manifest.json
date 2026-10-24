@@ -12,5 +12,6 @@
   "instance_fields": {
     "ue4_ini_enabled": { "type": "boolean", "default": false },
     "ue4_ini_section": { "type": "string", "optional": true }
-  }
+  },
+  "permissions": { "native_code": true }
 }
