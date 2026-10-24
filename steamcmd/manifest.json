@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "steamcmd",
   "name": "SteamCMD",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Installs and updates game servers with SteamCMD",
   "descriptions": { "ko": "SteamCMD로 게임 서버를 설치하고 업데이트합니다" },
   "author": "WareAoba",
