@@ -849,3 +849,15 @@ def test_install_limit_takes_off_only_the_bootstrap_time_actually_spent(fake_ste
     assert result["success"] is False and "timed out" in result["message"]
     budget = steamcmd_mod._INSTALL_BUDGET
     assert budget - 20 <= clock[0] <= budget + 10
+
+
+def test_disk_progress_never_shows_more_than_the_total():
+    """디스크 크기로 어림한 진행률: 받기 임시 파일까지 세면 어림 총량을 넘을 수 있다 (5547/5536 MB)."""
+    mb = 1_048_576
+    pct, msg = steamcmd_mod._disk_progress(2768 * mb, 5536 * mb)
+    assert (pct, msg) == (49, "Downloading: 2768/5536 MB")
+    pct, msg = steamcmd_mod._disk_progress(5547 * mb, 5536 * mb)
+    assert pct == 99
+    assert msg == "Downloading... (5547 MB)"
+    assert steamcmd_mod._disk_progress(300 * mb, 0) == (0, "Downloading... (300 MB)")
+    assert steamcmd_mod._disk_progress(0, 5536 * mb) == (0, "Preparing server files...")
