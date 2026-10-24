@@ -20,6 +20,7 @@ import locale
 import os
 import re
 import shutil
+import tempfile
 
 
 def _read_text(ini_path):
@@ -246,10 +247,12 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
             # 원래 인코딩에 없는 글자(예: latin-1 파일에 한글): BOM 붙은 UTF-8로 바꿔 쓴다
             data = text.encode("utf-8-sig")
         # 임시 파일에 쓴 뒤 바꾼다: 중간에 실패해도 원래 파일이 비지 않는다
-        tmp = f"{ini_path}.saba-tmp"
+        fd, tmp = tempfile.mkstemp(prefix=f"{os.path.basename(ini_path)}.", suffix=".saba-tmp", dir=os.path.dirname(ini_path) or ".")
         try:
-            with open(tmp, "wb") as f:
+            with os.fdopen(fd, "wb") as f:
                 f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
             _replace_file(tmp, ini_path)
         finally:
             if os.path.exists(tmp):
@@ -291,6 +294,11 @@ def _replace_file(tmp, path):
     ACL을 옮기지 못하면 실패한다. 백업 이름을 주면 어느 단계에서 실패해도 원래 파일이 남는다(Return value):
     임시 파일(부모 폴더의 상속 ACL)을 설정 파일 자리에 두지 않는다. POSIX: 권한 비트를 옮긴 뒤 os.replace"""
     if not os.path.isfile(path):
+        if os.name != "nt":
+            # mkstemp은 0600으로 만든다: 새 파일은 open()으로 만든 것과 같은 권한으로
+            umask = os.umask(0)
+            os.umask(umask)
+            os.chmod(tmp, 0o666 & ~umask)
         os.replace(tmp, path)
         return
     if os.name != "nt":

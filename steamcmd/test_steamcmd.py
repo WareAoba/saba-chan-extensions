@@ -786,11 +786,12 @@ def test_install_retries_a_transient_exit_8_but_not_a_full_disk(tmp_path, monkey
 
 def test_first_install_fits_in_the_daemons_install_limit(monkeypatch):
     """처음 설치는 SteamCMD 받기(ensure_available)와 설치를 이어서 한다: 받기는 느리게 이어져도 자기 한도에서 끊기고,
-    둘의 한도를 더해도 데몬 install_server 한도(1800초)보다 짧아 데몬이 Python을 먼저 죽이지 않는다"""
+    설치 한도는 받기에 쓴 시간을 포함해 데몬 install_server 한도(1800초)보다 짧아 데몬이 Python을 먼저 죽이지 않는다"""
     import inspect
     bootstrap = inspect.signature(SteamCMD.ensure_available).parameters["timeout"].default
     install = inspect.signature(SteamCMD.install).parameters["timeout"].default
-    assert bootstrap + steamcmd_mod._READ_TIMEOUT + install < 1800
+    # 받기가 한도를 넘는 것은 읽기 한 번만큼이고, 설치는 받기가 쓴 시간을 뺀 나머지만 쓴다
+    assert bootstrap + steamcmd_mod._READ_TIMEOUT < install < 1800
 
     clock = [0.0]
 
@@ -819,3 +820,32 @@ def test_first_install_fits_in_the_daemons_install_limit(monkeypatch):
         steamcmd_mod._download_bytes("https://example.invalid/steamcmd.zip", timeout=bootstrap)
     assert clock[0] <= bootstrap + steamcmd_mod._READ_TIMEOUT
     assert socket_timeouts == [steamcmd_mod._READ_TIMEOUT]
+
+
+@pytest.mark.parametrize("bootstrap_secs", [None, 600])
+def test_install_limit_takes_off_only_the_bootstrap_time_actually_spent(fake_steamcmd, tmp_path, monkeypatch, bootstrap_secs):
+    """설치 한도는 SteamCMD 받기와 합쳐 데몬 한도 안에 든다. SteamCMD가 이미 있으면 받기 몫을 미리 떼지 않고,
+    받았으면 실제로 걸린 시간만큼만 뗀다"""
+    install_with, _ = fake_steamcmd
+    clock = [0.0]
+    monkeypatch.setattr(steamcmd_mod.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(steamcmd_mod.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + 10))
+    steam = SteamCMD(explicit_path=str(tmp_path / "steamcmd.exe"))
+    if bootstrap_secs is not None:
+        portable = tmp_path / "portable"
+        monkeypatch.setattr(steamcmd_mod, "_portable_dir", lambda: portable)
+        steam = SteamCMD(explicit_path=str(tmp_path / "missing.exe"))
+
+        def _download(url, *, timeout):
+            clock[0] += bootstrap_secs
+            return b""
+
+        monkeypatch.setattr(steamcmd_mod, "_download_bytes", _download)
+        monkeypatch.setattr(steamcmd_mod, "_extract_archive", lambda data, url, dest: (dest / steamcmd_mod._EXE_NAME).write_text(""))
+    steam.ensure_available()
+    monkeypatch.setattr(steamcmd_mod.subprocess, "Popen", lambda *a, **k: _FakeProc(finish_after=None))
+    with patch.object(SteamCMD, "_fix_local_buildid"):
+        result = steam.install(380870, tmp_path / "server")
+    assert result["success"] is False and "timed out" in result["message"]
+    budget = steamcmd_mod._INSTALL_BUDGET
+    assert budget - 20 <= clock[0] <= budget + 10
