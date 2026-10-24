@@ -111,6 +111,20 @@ def _dir_size(path: Path) -> int:
     return total
 
 
+def _disk_progress(added_bytes: int, total: int) -> tuple[int, str]:
+    """디스크에 늘어난 크기로 어림한 진행률과 문구.
+
+    늘어난 크기에는 받기 임시 파일(steamapps/downloading)도 들어가 총량을 넘을 수 있다.
+    넘으면 총량을 보이지 않는다 (5547/5536 MB처럼 보이지 않게).
+    """
+    added_mb = added_bytes / 1_048_576
+    if 0 < added_bytes < total:
+        return min(int(added_bytes * 99 / total), 99), f"Downloading: {added_mb:.0f}/{total / 1_048_576:.0f} MB"
+    if added_mb > 1:
+        return (99 if total > 0 else 0), f"Downloading... ({added_mb:.0f} MB)"
+    return 0, "Preparing server files..."
+
+
 def _portable_dir() -> Path:
     """Return the directory used by saba-chan's portable SteamCMD.
 
@@ -399,21 +413,8 @@ class SteamCMD:
                     current_size = _dir_size(install_dir)
                     if steamcmd_cache.exists() and steamcmd_cache.parent != install_dir:
                         current_size += _dir_size(steamcmd_cache)
-                    added_bytes = current_size - initial_size
-                    added_mb = added_bytes / 1_048_576
-
                     # total 결정: stdout 파싱 > 알려진 앱 크기 > 없음
-                    total = parsed_total[0] or estimated_total
-
-                    if total > 0 and added_bytes > 0:
-                        pct = min(int(added_bytes * 99 / total), 99)
-                        msg = f"Downloading: {added_mb:.0f}/{total / 1_048_576:.0f} MB"
-                    elif added_mb > 1:
-                        pct = 0
-                        msg = f"Downloading... ({added_mb:.0f} MB)"
-                    else:
-                        pct = 0
-                        msg = "Preparing server files..."
+                    pct, msg = _disk_progress(current_size - initial_size, parsed_total[0] or estimated_total)
 
                 # 메시지 또는 퍼센티지가 변할 때마다 보고 + 10사이클(20초)마다 heartbeat
                 if msg != last_msg or pct != last_pct or heartbeat_counter >= 10:
