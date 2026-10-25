@@ -4,7 +4,17 @@
   "name": "SteamCMD",
   "version": "0.1.4",
   "description": "Installs and updates game servers with SteamCMD",
-  "descriptions": { "ko": "SteamCMD로 게임 서버를 설치하고 업데이트합니다" },
+  "descriptions": {
+    "ko": "SteamCMD로 게임 서버를 설치하고 업데이트합니다",
+    "ja": "SteamCMD でゲームサーバーをインストール・更新します",
+    "zh-CN": "使用 SteamCMD 安装和更新游戏服务器",
+    "zh-TW": "使用 SteamCMD 安裝並更新遊戲伺服器",
+    "es": "Instala y actualiza servidores de juego con SteamCMD",
+    "pt-BR": "Instala e atualiza servidores de jogo com o SteamCMD",
+    "ru": "Устанавливает и обновляет игровые серверы через SteamCMD",
+    "de": "Installiert und aktualisiert Gameserver mit SteamCMD",
+    "fr": "Installe et met à jour les serveurs de jeu avec SteamCMD"
+  },
   "author": "WareAoba",
   "min_app_version": "0.1.0",
   "dependencies": [],
