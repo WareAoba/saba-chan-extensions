@@ -4,7 +4,17 @@
   "name": "XNA Framework 4.0 (portable)",
   "version": "0.1.0",
   "description": "Puts a pinned copy of Microsoft XNA Framework 4.0 Refresh next to a game server, without installing it on the PC",
-  "descriptions": { "ko": "Microsoft XNA Framework 4.0 Refresh 고정 판을 PC에 설치하지 않고 게임 서버 옆에 둡니다" },
+  "descriptions": {
+    "ko": "Microsoft XNA Framework 4.0 Refresh 고정 판을 PC에 설치하지 않고 게임 서버 옆에 둡니다",
+    "ja": "Microsoft XNA Framework 4.0 Refresh の固定版を PC にインストールせず、ゲームサーバーの隣に置きます",
+    "zh-CN": "将固定版本的 Microsoft XNA Framework 4.0 Refresh 放在游戏服务器旁边，无需在电脑上安装",
+    "zh-TW": "將固定版本的 Microsoft XNA Framework 4.0 Refresh 放在遊戲伺服器旁邊，無需在電腦上安裝",
+    "es": "Coloca una copia fija de Microsoft XNA Framework 4.0 Refresh junto al servidor de juego, sin instalarla en el PC",
+    "pt-BR": "Coloca uma cópia fixa do Microsoft XNA Framework 4.0 Refresh ao lado do servidor de jogo, sem instalá-la no PC",
+    "ru": "Кладёт закреплённую копию Microsoft XNA Framework 4.0 Refresh рядом с игровым сервером, не устанавливая её на ПК",
+    "de": "Legt eine festgelegte Kopie von Microsoft XNA Framework 4.0 Refresh neben den Gameserver, ohne sie auf dem PC zu installieren",
+    "fr": "Place une copie figée de Microsoft XNA Framework 4.0 Refresh à côté du serveur de jeu, sans l'installer sur le PC"
+  },
   "author": "WareAoba",
   "min_app_version": "0.1.10",
   "dependencies": [],
