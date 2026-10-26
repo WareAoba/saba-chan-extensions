@@ -937,6 +937,37 @@ def _extract_archive(data: bytes, name: str, dest: Path) -> None:
 #   python extensions/steamcmd/steamcmd.py <function> < context.json
 
 
+def install_for_module(
+    module_dir: str | Path,
+    install_dir: str | Path,
+    *,
+    beta: Optional[str] = None,
+    timeout: Optional[float] = _INSTALL_BUDGET,
+) -> dict[str, Any]:
+    """모듈 module.toml ``[install]``(``method = "steamcmd"``, ``app_id``, ``anonymous``, ``beta``)대로
+    게임 서버를 설치·업데이트한다. 앱 ID를 모듈 코드에 다시 적지 않게 한다 (선언은 module.toml 한 곳).
+
+    SteamCMD가 없으면 받아 온다. 반환은 :meth:`SteamCMD.install` 과 같다.
+    ``[install]``에 steamcmd 앱 ID가 없으면 ``ValueError``.
+    """
+    import tomllib
+
+    raw = (Path(module_dir) / "module.toml").read_bytes()
+    section = tomllib.loads(raw.decode("utf-8-sig")).get("install", {})
+    app_id = section.get("app_id")
+    if section.get("method") != "steamcmd" or not isinstance(app_id, int) or app_id <= 0:
+        raise ValueError("module.toml [install] needs method = \"steamcmd\" and a positive app_id")
+    steam = SteamCMD()
+    steam.ensure_available()
+    return steam.install(
+        app_id,
+        install_dir,
+        anonymous=bool(section.get("anonymous", True)),
+        beta=beta or section.get("beta"),
+        timeout=timeout,
+    )
+
+
 def _plugin_ensure(config: dict) -> dict:
     steam = SteamCMD(config.get("explicit_path"))
     steam.ensure_available(timeout=config.get("timeout", 120))
