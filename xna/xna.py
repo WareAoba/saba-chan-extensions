@@ -21,6 +21,7 @@ one MSZIP cabinet) is read in Python instead.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import os
 import struct
 import tempfile
@@ -195,6 +196,9 @@ def _fetch(work_dir: Path) -> dict[str, bytes]:
             _download(MSI_URL, msi)
         except OSError as e:
             raise XnaError("download_failed", f"XNA download failed: {_reason(e)}") from None
+        except http.client.HTTPException as e:
+            # 받는 중에 연결이 끊김(IncompleteRead 등)
+            raise XnaError("download_failed", f"XNA download failed: {type(e).__name__}") from None
         try:
             data = Path(msi).read_bytes()
         except OSError as e:
