@@ -175,16 +175,25 @@ def files_from_msi(data: bytes) -> dict[str, bytes]:
 def _fetch(work_dir: Path) -> dict[str, bytes]:
     """Download the MSI into ``work_dir`` (a temporary file that is always removed) and take the files out.
     ``tempfile.mkstemp``, not ``mkdtemp``: a sandboxed run cannot write in a folder that mkdtemp makes."""
-    fd, msi = tempfile.mkstemp(prefix=".xna-", suffix=".download", dir=work_dir)
-    os.close(fd)
+    try:
+        fd, msi = tempfile.mkstemp(prefix=".xna-", suffix=".download", dir=work_dir)
+        os.close(fd)
+    except OSError as e:
+        raise XnaError("write_failed", f"Could not write a temporary file in {work_dir}: {e}") from None
     try:
         try:
             _download(MSI_URL, msi)
         except OSError as e:
             raise XnaError("download_failed", f"XNA download failed: {e}") from None
-        data = Path(msi).read_bytes()
+        try:
+            data = Path(msi).read_bytes()
+        except OSError as e:
+            raise XnaError("write_failed", f"Could not read the downloaded XNA installer: {e}") from None
     finally:
-        os.remove(msi)
+        try:
+            os.remove(msi)
+        except OSError:
+            pass
     if _sha256(data) != MSI_SHA256:
         raise XnaError("checksum_mismatch", "The downloaded XNA installer is not the official file")
     files = files_from_msi(data)
