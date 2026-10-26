@@ -347,21 +347,29 @@ class _ReplaceDenied(Exception):
 
 
 def _overwrite_in_place(path, data):
-    """원래 파일을 열어 내용만 바꾼다. 쓰다 실패하면 원래 내용을 되돌려 쓴다 (saba-core daemon_rcon.atomic_write와 같은 방식)"""
-    with open(path, "r+b") as f:
-        original = f.read()
+    """원래 파일을 열어 내용만 바꾼다. 쓰다 실패하면 원래 내용을 되돌려 쓴다 (saba-core daemon_rcon.atomic_write와 같은 방식).
+    버퍼 없이 fd로 쓴다: 실패한 쓰기의 버퍼가 복구 중에 다시 쓰이지 않는다"""
+    fd = os.open(path, os.O_RDWR | getattr(os, "O_BINARY", 0))
+    try:
+        original = b""
+        while chunk := os.read(fd, 1 << 20):
+            original += chunk
         try:
-            f.seek(0)
-            f.write(data)
-            f.truncate()
-            f.flush()
-            os.fsync(f.fileno())
+            _write_all_at_start(fd, data)
+            os.fsync(fd)
         except BaseException:
-            f.seek(0)
-            f.write(original)
-            f.truncate()
-            f.flush()
+            _write_all_at_start(fd, original)
             raise
+    finally:
+        os.close(fd)
+
+
+def _write_all_at_start(fd, data):
+    os.lseek(fd, 0, os.SEEK_SET)
+    view = memoryview(data)
+    while view:
+        view = view[os.write(fd, view):]
+    os.ftruncate(fd, len(data))
 
 
 _ERROR_ACCESS_DENIED = 5

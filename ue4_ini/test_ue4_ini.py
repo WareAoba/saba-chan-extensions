@@ -4,7 +4,10 @@
 """
 import json
 import os
+import subprocess
+import sys
 import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -427,3 +430,25 @@ def test_a_folder_without_create_rights_is_written_in_place(tmp_path, monkeypatc
     monkeypatch.setattr(ue4_ini.tempfile, "mkstemp", lambda *a, **k: (_ for _ in ()).throw(PermissionError(13, "denied")))
     assert write_option_settings(str(ini), {"AdminPassword": "y"}) is True
     assert parse_option_settings(str(ini))["AdminPassword"] == "y"
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="RLIMIT_FSIZE")
+def test_a_failed_in_place_write_restores_the_original(tmp_path):
+    """제자리 쓰기가 디스크·크기 제한으로 실패해도 원래 내용이 남는다 (실패한 쓰기 버퍼를 다시 내보내지 않는다)"""
+    from extensions.ue4_ini import ue4_ini
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_bytes(b"original")
+    folder = str(Path(ue4_ini.__file__).parent)
+    script = (
+        f"import sys, signal, resource; sys.path.insert(0, {folder!r})\n"
+        "import ue4_ini\n"
+        "signal.signal(signal.SIGXFSZ, signal.SIG_IGN)\n"
+        "resource.setrlimit(resource.RLIMIT_FSIZE, (16, 16))\n"
+        "try:\n"
+        f"    ue4_ini._overwrite_in_place({str(ini)!r}, b'X' * 32)\n"
+        "except OSError:\n"
+        "    print('failed')\n"
+    )
+    out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30)
+    assert "failed" in out.stdout, out.stderr
+    assert ini.read_bytes() == b"original"
