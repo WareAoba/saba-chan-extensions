@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "xna",
+  "name": "XNA Framework 4.0 (portable)",
+  "version": "0.1.0",
+  "description": "Puts a pinned copy of Microsoft XNA Framework 4.0 Refresh next to a game server, without installing it on the PC",
+  "descriptions": { "ko": "Microsoft XNA Framework 4.0 Refresh 고정 판을 PC에 설치하지 않고 게임 서버 옆에 둡니다" },
+  "author": "WareAoba",
+  "min_app_version": "0.1.10",
+  "dependencies": [],
+  "permissions": { "network": true }
+}
