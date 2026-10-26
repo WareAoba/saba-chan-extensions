@@ -400,7 +400,7 @@ def test_a_write_first_restores_a_backup_left_by_an_interrupted_replace(tmp_path
 def test_an_access_denied_replace_falls_back_only_for_a_file_with_the_same_access(tmp_path, monkeypatch):
     """격리 실행은 DACL을 옮길 권한이 없어 ReplaceFileW가 거부된다(5). 원래 파일과 임시 파일이 같은 폴더 권한만 물려받았으면
     바꿔도 권한이 넓어지지 않으므로 os.replace로 바꾼다. 상속 표시의 자동 상속 플래그(AI)만 다른 것은 같은 권한이다.
-    권한이 다르면 원래 파일을 그대로 둔다"""
+    권한이 다르면(PC 실측: 격리된 팰월드 저장이 매번 실패했다) 원래 파일에 제자리로 써서 권한·무결성 표시를 그대로 둔다"""
     from extensions.ue4_ini import ue4_ini
     ini = tmp_path / "PalWorldSettings.ini"
     monkeypatch.setattr(ue4_ini.os, "name", "nt")
@@ -410,9 +410,20 @@ def test_an_access_denied_replace_falls_back_only_for_a_file_with_the_same_acces
     monkeypatch.setattr(ue4_ini, "_encrypted", lambda path: False)
     original = "O:BAD:AI(A;ID;FA;;;SY)S:(ML;ID;NW;;;LW)"
 
-    for temp, written in (("O:BAD:AI(A;ID;FA;;;SY)S:AI(ML;ID;NW;;;LW)", "y"), ("O:BAD:AI(A;ID;FA;;;WD)S:AI(ML;ID;NW;;;LW)", "x")):
+    for temp, in_place in (("O:BAD:AI(A;ID;FA;;;SY)S:AI(ML;ID;NW;;;LW)", False), ("O:BAD:AI(A;ID;FA;;;WD)S:AI(ML;ID;NW;;;LW)", True)):
         ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
+        inode = ini.stat().st_ino
         monkeypatch.setattr(ue4_ini, "_access_of", lambda path, temp=temp: original if path.endswith(".ini") else temp)
-        assert write_option_settings(str(ini), {"AdminPassword": "y"}) is (written == "y")
-        assert parse_option_settings(str(ini))["AdminPassword"] == written
+        assert write_option_settings(str(ini), {"AdminPassword": "y"}) is True
+        assert parse_option_settings(str(ini))["AdminPassword"] == "y"
+        assert (ini.stat().st_ino == inode) is in_place
         assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"]
+
+
+def test_a_folder_without_create_rights_is_written_in_place(tmp_path, monkeypatch):
+    from extensions.ue4_ini import ue4_ini
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
+    monkeypatch.setattr(ue4_ini.tempfile, "mkstemp", lambda *a, **k: (_ for _ in ()).throw(PermissionError(13, "denied")))
+    assert write_option_settings(str(ini), {"AdminPassword": "y"}) is True
+    assert parse_option_settings(str(ini))["AdminPassword"] == "y"
