@@ -247,14 +247,24 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
         except UnicodeEncodeError:
             # 원래 인코딩에 없는 글자(예: latin-1 파일에 한글): BOM 붙은 UTF-8로 바꿔 쓴다
             data = text.encode("utf-8-sig")
-        # 임시 파일에 쓴 뒤 바꾼다: 중간에 실패해도 원래 파일이 비지 않는다
-        fd, tmp = tempfile.mkstemp(prefix=f"{os.path.basename(ini_path)}.", suffix=".saba-tmp", dir=os.path.dirname(ini_path) or ".")
+        # 임시 파일에 쓴 뒤 바꾼다: 중간에 실패해도 원래 파일이 비지 않는다.
+        # 폴더에 새 파일을 만들 권한이 없으면(격리 실행) 원래 파일에 제자리로 쓴다
+        try:
+            fd, tmp = tempfile.mkstemp(prefix=f"{os.path.basename(ini_path)}.", suffix=".saba-tmp", dir=os.path.dirname(ini_path) or ".")
+        except PermissionError:
+            if not os.path.isfile(ini_path):
+                raise
+            _overwrite_in_place(ini_path, data)
+            return True
         try:
             with os.fdopen(fd, "wb") as f:
                 f.write(data)
                 f.flush()
                 os.fsync(f.fileno())
-            _replace_file(tmp, ini_path)
+            try:
+                _replace_file(tmp, ini_path)
+            except _ReplaceDenied:
+                _overwrite_in_place(ini_path, data)
         finally:
             if os.path.exists(tmp):
                 os.remove(tmp)
@@ -327,7 +337,39 @@ def _replace_file(tmp, path):
         if _same_access(_access_of(path), _access_of(tmp)) and _encrypted(path) == _encrypted(tmp):
             os.replace(tmp, path)
             return
+        # 권한이 다르면(격리 실행이 만든 임시 파일) 바꾸지 않고 원래 파일에 제자리로 쓴다: 권한·무결성 표시가 그대로다
+        raise _ReplaceDenied(path)
     raise _winerror(err)
+
+
+class _ReplaceDenied(Exception):
+    """원래 파일의 권한을 옮길 수 없어 교체하지 않았다 (원래 파일은 그대로)"""
+
+
+def _overwrite_in_place(path, data):
+    """원래 파일을 열어 내용만 바꾼다. 쓰다 실패하면 원래 내용을 되돌려 쓴다 (saba-core daemon_rcon.atomic_write와 같은 방식).
+    버퍼 없이 fd로 쓴다: 실패한 쓰기의 버퍼가 복구 중에 다시 쓰이지 않는다"""
+    fd = os.open(path, os.O_RDWR | getattr(os, "O_BINARY", 0))
+    try:
+        original = b""
+        while chunk := os.read(fd, 1 << 20):
+            original += chunk
+        try:
+            _write_all_at_start(fd, data)
+            os.fsync(fd)
+        except BaseException:
+            _write_all_at_start(fd, original)
+            raise
+    finally:
+        os.close(fd)
+
+
+def _write_all_at_start(fd, data):
+    os.lseek(fd, 0, os.SEEK_SET)
+    view = memoryview(data)
+    while view:
+        view = view[os.write(fd, view):]
+    os.ftruncate(fd, len(data))
 
 
 _ERROR_ACCESS_DENIED = 5

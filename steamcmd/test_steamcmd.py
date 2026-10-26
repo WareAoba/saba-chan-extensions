@@ -856,11 +856,40 @@ def test_disk_progress_never_shows_more_than_the_total():
     mb = 1_048_576
     pct, msg = steamcmd_mod._disk_progress(2768 * mb, 5536 * mb)
     assert (pct, msg) == (49, "Downloading: 2768/5536 MB")
+    # 총량을 넘으면(미리 잡은 파일 크기·임시 파일) 진행률을 모른다: 99%로 튀지 않고 직전 값을 유지하게 None
     pct, msg = steamcmd_mod._disk_progress(5547 * mb, 5536 * mb)
-    assert pct == 99
+    assert pct is None
     assert msg == "Downloading... (5547 MB)"
     assert steamcmd_mod._disk_progress(300 * mb, 0) == (0, "Downloading... (300 MB)")
     assert steamcmd_mod._disk_progress(0, 5536 * mb) == (0, "Preparing server files...")
+
+
+def test_manifest_progress_reads_bytes_from_the_app_manifest(tmp_path):
+    """SteamCMD 출력이 버퍼에 묶여 있어도 appmanifest의 BytesDownloaded/BytesToDownload로 진행률을 읽는다."""
+    mb = 1_048_576
+    steamapps = tmp_path / "steamapps"
+    steamapps.mkdir()
+    assert steamcmd_mod._manifest_progress(str(tmp_path), 380870) is None
+    acf = steamapps / "appmanifest_380870.acf"
+    acf.write_text(f'"AppState"\n{{\n\t"appid"\t\t"380870"\n\t"BytesToDownload"\t\t"{6000 * mb}"\n'
+                   f'\t"BytesDownloaded"\t\t"{1500 * mb}"\n}}\n', encoding="utf-8")
+    assert steamcmd_mod._manifest_progress(str(tmp_path), 380870) == (25, "Downloading: 1500/6000 MB (25%)")
+    acf.write_text('"AppState"\n{\n\t"BytesToDownload"\t\t"0"\n\t"BytesDownloaded"\t\t"0"\n}\n', encoding="utf-8")
+    assert steamcmd_mod._manifest_progress(str(tmp_path), 380870) is None
+
+
+def test_install_progress_does_not_jump_to_99_when_files_are_preallocated(fake_steamcmd, monkeypatch):
+    """받기 시작에 큰 파일을 미리 잡아 디스크 크기가 어림 총량을 넘어도 99%로 튀지 않는다 (127MB → 99%)."""
+    install_with, _ = fake_steamcmd
+    mb = 1_048_576
+    sizes = iter([0, 127 * mb, 7000 * mb])
+    monkeypatch.setattr(steamcmd_mod, "_dir_size", lambda path: next(sizes, 7000 * mb))
+    reported = []
+    monkeypatch.setattr(steamcmd_mod, "_progress", lambda pct, msg: reported.append(pct))
+    install_with(_FakeProc(finish_after=3))
+    during = reported[:-1]  # 마지막은 설치 완료 100%
+    assert 99 not in during
+    assert max(during) < 5
 
 
 def test_install_for_module_reads_the_app_from_module_toml(tmp_path):

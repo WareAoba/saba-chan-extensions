@@ -4,7 +4,10 @@
 """
 import json
 import os
+import subprocess
+import sys
 import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -400,7 +403,7 @@ def test_a_write_first_restores_a_backup_left_by_an_interrupted_replace(tmp_path
 def test_an_access_denied_replace_falls_back_only_for_a_file_with_the_same_access(tmp_path, monkeypatch):
     """격리 실행은 DACL을 옮길 권한이 없어 ReplaceFileW가 거부된다(5). 원래 파일과 임시 파일이 같은 폴더 권한만 물려받았으면
     바꿔도 권한이 넓어지지 않으므로 os.replace로 바꾼다. 상속 표시의 자동 상속 플래그(AI)만 다른 것은 같은 권한이다.
-    권한이 다르면 원래 파일을 그대로 둔다"""
+    권한이 다르면(PC 실측: 격리된 팰월드 저장이 매번 실패했다) 원래 파일에 제자리로 써서 권한·무결성 표시를 그대로 둔다"""
     from extensions.ue4_ini import ue4_ini
     ini = tmp_path / "PalWorldSettings.ini"
     monkeypatch.setattr(ue4_ini.os, "name", "nt")
@@ -410,9 +413,42 @@ def test_an_access_denied_replace_falls_back_only_for_a_file_with_the_same_acces
     monkeypatch.setattr(ue4_ini, "_encrypted", lambda path: False)
     original = "O:BAD:AI(A;ID;FA;;;SY)S:(ML;ID;NW;;;LW)"
 
-    for temp, written in (("O:BAD:AI(A;ID;FA;;;SY)S:AI(ML;ID;NW;;;LW)", "y"), ("O:BAD:AI(A;ID;FA;;;WD)S:AI(ML;ID;NW;;;LW)", "x")):
+    for temp, in_place in (("O:BAD:AI(A;ID;FA;;;SY)S:AI(ML;ID;NW;;;LW)", False), ("O:BAD:AI(A;ID;FA;;;WD)S:AI(ML;ID;NW;;;LW)", True)):
         ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
+        inode = ini.stat().st_ino
         monkeypatch.setattr(ue4_ini, "_access_of", lambda path, temp=temp: original if path.endswith(".ini") else temp)
-        assert write_option_settings(str(ini), {"AdminPassword": "y"}) is (written == "y")
-        assert parse_option_settings(str(ini))["AdminPassword"] == written
+        assert write_option_settings(str(ini), {"AdminPassword": "y"}) is True
+        assert parse_option_settings(str(ini))["AdminPassword"] == "y"
+        assert (ini.stat().st_ino == inode) is in_place
         assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"]
+
+
+def test_a_folder_without_create_rights_is_written_in_place(tmp_path, monkeypatch):
+    from extensions.ue4_ini import ue4_ini
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
+    monkeypatch.setattr(ue4_ini.tempfile, "mkstemp", lambda *a, **k: (_ for _ in ()).throw(PermissionError(13, "denied")))
+    assert write_option_settings(str(ini), {"AdminPassword": "y"}) is True
+    assert parse_option_settings(str(ini))["AdminPassword"] == "y"
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="RLIMIT_FSIZE")
+def test_a_failed_in_place_write_restores_the_original(tmp_path):
+    """제자리 쓰기가 디스크·크기 제한으로 실패해도 원래 내용이 남는다 (실패한 쓰기 버퍼를 다시 내보내지 않는다)"""
+    from extensions.ue4_ini import ue4_ini
+    ini = tmp_path / "PalWorldSettings.ini"
+    ini.write_bytes(b"original")
+    folder = str(Path(ue4_ini.__file__).parent)
+    script = (
+        f"import sys, signal, resource; sys.path.insert(0, {folder!r})\n"
+        "import ue4_ini\n"
+        "signal.signal(signal.SIGXFSZ, signal.SIG_IGN)\n"
+        "resource.setrlimit(resource.RLIMIT_FSIZE, (16, 16))\n"
+        "try:\n"
+        f"    ue4_ini._overwrite_in_place({str(ini)!r}, b'X' * 32)\n"
+        "except OSError:\n"
+        "    print('failed')\n"
+    )
+    out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30)
+    assert "failed" in out.stdout, out.stderr
+    assert ini.read_bytes() == b"original"
