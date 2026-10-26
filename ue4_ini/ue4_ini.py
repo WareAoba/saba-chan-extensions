@@ -20,6 +20,7 @@ import locale
 import os
 import re
 import shutil
+import sys
 import tempfile
 
 
@@ -258,7 +259,9 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
             if os.path.exists(tmp):
                 os.remove(tmp)
         return True
-    except OSError:
+    except OSError as e:
+        # 경로 없이 까닭(오류 번호)만 남긴다: 호출한 모듈은 실패만 알린다
+        print(f"[ue4_ini] write failed: errno={e.errno} winerror={getattr(e, 'winerror', None)}", file=sys.stderr)
         return False
 
 
@@ -318,4 +321,56 @@ def _replace_file(tmp, path):
     if err == _ERROR_UNABLE_TO_MOVE_REPLACEMENT_2 and not os.path.exists(path) and os.path.isfile(backup):
         # 원래 파일(원래 ACL)을 제자리로 되돌린다. 새 값은 쓰지 못한 것으로 알린다
         os.replace(backup, path)
+    elif err == _ERROR_ACCESS_DENIED and os.path.isfile(path) and not os.path.exists(backup):
+        # 격리 실행은 DACL을 옮길 권한이 없다. 원래 파일과 임시 파일이 같은 폴더에서 같은 권한을 물려받았으면
+        # 바꿔도 권한이 넓어지지 않는다 (EFS 암호화도 ReplaceFileW만 옮기므로 같아야 한다. saba-core daemon_rcon과 같은 판정)
+        if _same_access(_access_of(path), _access_of(tmp)) and _encrypted(path) == _encrypted(tmp):
+            os.replace(tmp, path)
+            return
     raise _winerror(err)
+
+
+_ERROR_ACCESS_DENIED = 5
+
+
+def _same_access(a, b):
+    """두 SDDL이 같은 권한인지. 무결성 표시 SACL의 자동 상속 제어 플래그(AI·AR)는 보지 않는다:
+    데몬이 기존 하위 파일에 맞춘 상속 표시에는 없고, OS가 새 파일에 붙인 표시에는 있다 (ACE는 같다)"""
+    if a is None or b is None:
+        return False
+    plain = lambda sddl: re.sub(r"S:(?:AI|AR)*", "S:", sddl)
+    return plain(a) == plain(b)
+
+
+def _encrypted(path):
+    return bool(getattr(os.stat(path), "st_file_attributes", 0) & 0x4000)  # FILE_ATTRIBUTE_ENCRYPTED
+
+
+def _access_of(path):
+    """파일의 소유자·DACL·무결성 표시(SDDL 문자열). 읽지 못하면 None"""
+    import ctypes
+    from ctypes import wintypes
+    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    advapi.GetNamedSecurityInfoW.argtypes = [
+        wintypes.LPCWSTR, ctypes.c_int, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p,
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
+    advapi.GetNamedSecurityInfoW.restype = wintypes.DWORD
+    advapi.ConvertSecurityDescriptorToStringSecurityDescriptorW.argtypes = [
+        ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(wintypes.LPWSTR), ctypes.c_void_p]
+    kernel.LocalFree.argtypes = [ctypes.c_void_p]
+    # SE_FILE_OBJECT, OWNER | DACL | LABEL_SECURITY_INFORMATION, SDDL_REVISION_1
+    se_file_object, info, sddl_revision_1 = 1, 0x1 | 0x4 | 0x10, 1
+    sd = ctypes.c_void_p()
+    if advapi.GetNamedSecurityInfoW(path, se_file_object, info, None, None, None, None, ctypes.byref(sd)) != 0:
+        return None
+    try:
+        text = wintypes.LPWSTR()
+        if not advapi.ConvertSecurityDescriptorToStringSecurityDescriptorW(sd, sddl_revision_1, info, ctypes.byref(text), None):
+            return None
+        try:
+            return text.value
+        finally:
+            kernel.LocalFree(text)
+    finally:
+        kernel.LocalFree(sd)
