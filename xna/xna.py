@@ -21,6 +21,7 @@ one MSZIP cabinet) is read in Python instead.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import os
 import struct
 import tempfile
@@ -62,6 +63,16 @@ class XnaError(Exception):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
+
+
+def _reason(e: OSError) -> str:
+    """Why an OS call failed, without the file name: messages reach user alerts, which never show PC paths"""
+    reason = getattr(e, "reason", None)  # urllib.error.URLError
+    if reason is not None and not isinstance(reason, OSError):
+        return str(reason)
+    if isinstance(reason, OSError):
+        e = reason
+    return e.strerror or type(e).__name__
 
 
 def _sha256(data: bytes) -> str:
@@ -179,16 +190,19 @@ def _fetch(work_dir: Path) -> dict[str, bytes]:
         fd, msi = tempfile.mkstemp(prefix=".xna-", suffix=".download", dir=work_dir)
         os.close(fd)
     except OSError as e:
-        raise XnaError("write_failed", f"Could not write a temporary file in {work_dir}: {e}") from None
+        raise XnaError("write_failed", f"Could not write a temporary file in the server folder: {_reason(e)}") from None
     try:
         try:
             _download(MSI_URL, msi)
         except OSError as e:
-            raise XnaError("download_failed", f"XNA download failed: {e}") from None
+            raise XnaError("download_failed", f"XNA download failed: {_reason(e)}") from None
+        except http.client.HTTPException as e:
+            # 받는 중에 연결이 끊김(IncompleteRead 등)
+            raise XnaError("download_failed", f"XNA download failed: {type(e).__name__}") from None
         try:
             data = Path(msi).read_bytes()
         except OSError as e:
-            raise XnaError("write_failed", f"Could not read the downloaded XNA installer: {e}") from None
+            raise XnaError("write_failed", f"Could not read the downloaded XNA installer: {_reason(e)}") from None
     finally:
         try:
             os.remove(msi)
@@ -237,5 +251,5 @@ def install(target_dir) -> list[str]:
             if not _matches(target / name, digest):
                 _write(target / name, files[name])
     except OSError as e:
-        raise XnaError("write_failed", f"Could not write XNA files to {target}: {e}") from None
+        raise XnaError("write_failed", f"Could not write XNA files to the server folder: {_reason(e)}") from None
     return [name for _, name, _ in FILES]
