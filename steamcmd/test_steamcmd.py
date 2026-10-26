@@ -861,3 +861,27 @@ def test_disk_progress_never_shows_more_than_the_total():
     assert msg == "Downloading... (5547 MB)"
     assert steamcmd_mod._disk_progress(300 * mb, 0) == (0, "Downloading... (300 MB)")
     assert steamcmd_mod._disk_progress(0, 5536 * mb) == (0, "Preparing server files...")
+
+
+def test_install_for_module_reads_the_app_from_module_toml(tmp_path):
+    """앱 ID·익명 로그인·베타는 모듈 module.toml [install] 한 곳에서 읽는다 (모듈 코드에 다시 적지 않는다)"""
+    from extensions.steamcmd import install_for_module
+    module = tmp_path / "game"
+    module.mkdir()
+    (module / "module.toml").write_bytes(
+        "﻿[module]\nname = \"g\"\n\n[install]\nmethod = \"steamcmd\"\napp_id = 380870\nanonymous = true\n".encode("utf-8"))
+    calls = []
+    with patch.object(SteamCMD, "ensure_available", lambda self, **k: calls.append("ensure")), \
+         patch.object(SteamCMD, "install", lambda self, app_id, install_dir, **k: calls.append((app_id, str(install_dir), k)) or {"success": True}):
+        assert install_for_module(module, tmp_path / "server", beta="unstable") == {"success": True}
+    assert calls[0] == "ensure"
+    app_id, target, options = calls[1]
+    assert (app_id, target) == (380870, str(tmp_path / "server"))
+    assert options["anonymous"] is True and options["beta"] == "unstable"
+
+
+def test_install_for_module_needs_a_steamcmd_app(tmp_path):
+    from extensions.steamcmd import install_for_module
+    (tmp_path / "module.toml").write_text("[module]\nname = \"g\"\n\n[install]\nmethod = \"download\"\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        install_for_module(tmp_path, tmp_path / "server")
