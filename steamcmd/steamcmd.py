@@ -126,25 +126,37 @@ def _disk_progress(added_bytes: int, total: int) -> tuple[Optional[int], str]:
     return 0, "Preparing server files..."
 
 
-def _manifest_progress(install_dir: str, app_id: int, added_bytes: int = 0) -> Optional[tuple[int, str]]:
-    """appmanifest의 BytesDownloaded/BytesToDownload로 읽은 받기 진행률. 받을 양을 모르면 None.
-
-    SteamCMD는 받는 동안 BytesDownloaded를 거의 갱신하지 않는다(0에 머물다 끝에 한꺼번에).
-    디스크에 늘어난 크기(*added_bytes*)가 받을 양 안이면 그만큼 받은 것으로 본다. 넘으면 미리 잡은 파일이라 믿지 않는다.
-    """
+def _manifest_bytes(install_dir: str, app_id: int) -> dict[str, int]:
+    """appmanifest의 Bytes* 값 (BytesToDownload, BytesDownloaded, BytesToStage …). 없거나 못 읽으면 빈 dict"""
     manifest = resolve_manifest_path(install_dir, app_id)
     if manifest is None:
-        return None
+        return {}
     try:
         content = manifest.read_text(encoding="utf-8", errors="replace")
     except OSError:
+        return {}
+    return {key: int(value) for key, value in re.findall(r'"(Bytes\w+)"\s+"(\d+)"', content)}
+
+
+def _manifest_progress(install_dir: str, app_id: int, added_bytes: int = 0,
+                       staged_from: Optional[int] = None) -> Optional[tuple[int, str]]:
+    """appmanifest의 BytesDownloaded/BytesToDownload로 읽은 받기 진행률. 받을 양을 모르면 None.
+
+    SteamCMD는 받는 동안 BytesDownloaded를 거의 갱신하지 않는다(0에 머물다 끝에 한꺼번에).
+    디스크에 늘어난 크기(*added_bytes*)는 받는 동안 BytesToStage(풀어 쓴 크기)까지 는다. BytesToStage를 알면
+    *staged_from*(그것을 처음 본 때의 크기: 받기 시작에 미리 잡은 파일, 없으면 0)에서 BytesToStage까지 는 비율만큼 받은 것으로 본다
+    (PC 실측 10-27: 3초 만에 5937MB를 잡고 80초 동안 6819MB까지 고르게 커짐). 모르면 받을 양 안의 크기만 받은 것으로 본다.
+    """
+    values = _manifest_bytes(install_dir, app_id)
+    total = values.get("BytesToDownload", 0)
+    if total <= 0 or "BytesDownloaded" not in values:
         return None
-    to_download = re.search(r'"BytesToDownload"\s+"(\d+)"', content)
-    downloaded = re.search(r'"BytesDownloaded"\s+"(\d+)"', content)
-    if not to_download or not downloaded or int(to_download.group(1)) <= 0:
-        return None
-    total, done = int(to_download.group(1)), min(int(downloaded.group(1)), int(to_download.group(1)))
-    if done < added_bytes < total:
+    done = min(values["BytesDownloaded"], total)
+    to_stage = values.get("BytesToStage", 0)
+    if staged_from is not None and staged_from < to_stage:
+        staged = min(max(added_bytes - staged_from, 0) / (to_stage - staged_from), 1.0)
+        done = max(done, int(total * staged))
+    elif done < added_bytes < total:
         done = added_bytes
     pct = min(int(done * 100 / total), 99)
     return pct, f"Downloading: {done / 1_048_576:.0f}/{total / 1_048_576:.0f} MB ({pct}%)"
@@ -420,6 +432,8 @@ class SteamCMD:
             last_pct = -1
             heartbeat_counter = 0
             estimated_total = _KNOWN_APP_SIZES.get(app_id, 0)
+            staged_from: Optional[int] = None
+            prev_added = 0
             timed_out = False
 
             while proc.poll() is None:
@@ -439,7 +453,17 @@ class SteamCMD:
                     if steamcmd_cache.exists() and steamcmd_cache.parent != install_dir:
                         current_size += _dir_size(steamcmd_cache)
                     added = current_size - initial_size
-                    manifest_progress = _manifest_progress(str(install_dir), app_id, added)
+                    # 미리 잡은 크기: BytesToStage를 처음 본 때 받을 양을 넘었으면 그 크기, 그 뒤 받을 양을 넘는 순간이면 그 한 번에 는 크기.
+                    # 그 뒤 BytesToStage까지 느는 비율이 받은 비율
+                    values = _manifest_bytes(str(install_dir), app_id)
+                    to_download = values.get("BytesToDownload", 0)
+                    if values.get("BytesToStage", 0) > 0:
+                        if staged_from is None:
+                            staged_from = added if added > to_download else 0
+                        elif prev_added <= to_download < added:
+                            staged_from = max(staged_from, added - prev_added)
+                    prev_added = added
+                    manifest_progress = _manifest_progress(str(install_dir), app_id, added, staged_from)
                     if manifest_progress is not None:
                         # appmanifest의 받을 바이트를 총량으로
                         pct, msg = manifest_progress
