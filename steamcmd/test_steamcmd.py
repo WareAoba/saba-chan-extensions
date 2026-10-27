@@ -905,6 +905,52 @@ def test_manifest_progress_uses_disk_growth_while_the_manifest_lags(tmp_path):
     assert steamcmd_mod._manifest_progress(str(tmp_path), 380870, 7000 * mb) == (0, "Downloading: 0/1878 MB (0%)")
 
 
+def test_manifest_progress_counts_staging_past_the_preallocated_size(tmp_path):
+    """SteamCMD는 받기 시작에 파일을 미리 잡아(PC 실측 10-27: 3초 만에 5937MB) 받을 양(1878MB)을 넘긴 뒤,
+    받는 동안 그 크기에서 BytesToStage(6819MB)까지 고르게 키운다. 그 비율만큼 받은 것으로 본다."""
+    mb = 1_048_576
+    steamapps = tmp_path / "steamapps"
+    steamapps.mkdir()
+    (steamapps / "appmanifest_380870.acf").write_text(
+        f'"AppState"\n{{\n\t"BytesToDownload"\t\t"{1878 * mb}"\n\t"BytesDownloaded"\t\t"0"\n'
+        f'\t"BytesToStage"\t\t"{6819 * mb}"\n\t"BytesStaged"\t\t"0"\n}}\n', encoding="utf-8")
+    assert steamcmd_mod._manifest_progress(str(tmp_path), 380870, 6378 * mb, 5937 * mb) == (50, "Downloading: 939/1878 MB (50%)")
+    assert steamcmd_mod._manifest_progress(str(tmp_path), 380870, 5937 * mb, 5937 * mb) == (0, "Downloading: 0/1878 MB (0%)")
+    assert steamcmd_mod._manifest_progress(str(tmp_path), 380870, 7000 * mb, 5937 * mb)[0] == 99
+    # 미리 잡지 않으면 0에서 BytesToStage까지 (받을 양을 넘어도 99%로 튀지 않는다)
+    assert steamcmd_mod._manifest_progress(str(tmp_path), 380870, 3410 * mb, 0)[0] == 50
+
+
+@pytest.mark.parametrize("manifest_at", [0, 1], ids=["manifest-before-preallocation", "manifest-with-preallocation"])
+def test_install_progress_rises_while_preallocated_files_fill(fake_steamcmd, tmp_path, monkeypatch, manifest_at):
+    """미리 잡은 파일로 받을 양을 넘은 뒤에도 6%에 멈추지 않고 받는 동안 계속 오른다 (PC 실측 10-27: 84초 멈춤 뒤 99%).
+    appmanifest를 미리 잡기 전에 봤어도 미리 잡은 크기는 받은 양에 넣지 않는다 (87%로 튀지 않게)."""
+    install_with, _ = fake_steamcmd
+    mb = 1_048_576
+    steamapps = tmp_path / "server" / "steamapps"
+    sizes = [0, 0, 5937 * mb, 6150 * mb, 6400 * mb, 6700 * mb]
+    calls = [0]
+
+    def dir_size(path):
+        i = min(calls[0], len(sizes) - 1)
+        calls[0] += 1
+        if i == manifest_at + 1:
+            steamapps.mkdir(parents=True, exist_ok=True)
+            (steamapps / "appmanifest_380870.acf").write_text(
+                f'"AppState"\n{{\n\t"BytesToDownload"\t\t"{1878 * mb}"\n\t"BytesDownloaded"\t\t"0"\n'
+                f'\t"BytesToStage"\t\t"{6819 * mb}"\n}}\n', encoding="utf-8")
+        return sizes[i]
+
+    monkeypatch.setattr(steamcmd_mod, "_dir_size", dir_size)
+    reported = []
+    monkeypatch.setattr(steamcmd_mod, "_progress", lambda pct, msg: reported.append(pct))
+    install_with(_FakeProc(finish_after=5))
+    during = reported[:-1]
+    assert during == sorted(during), during
+    assert max(during[:3]) < 30, during
+    assert during[-1] >= 80, during
+
+
 def test_install_progress_never_goes_back_when_the_manifest_appears(fake_steamcmd, tmp_path, monkeypatch):
     """디스크 어림 2% 다음에 appmanifest(받은 양 0)가 생겨도 0%로 돌아가지 않고, 받는 동안 계속 오른다."""
     install_with, _ = fake_steamcmd
