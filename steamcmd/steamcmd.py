@@ -126,8 +126,12 @@ def _disk_progress(added_bytes: int, total: int) -> tuple[Optional[int], str]:
     return 0, "Preparing server files..."
 
 
-def _manifest_progress(install_dir: str, app_id: int) -> Optional[tuple[int, str]]:
-    """appmanifest의 BytesDownloaded/BytesToDownload로 읽은 받기 진행률. 받을 양을 모르면 None."""
+def _manifest_progress(install_dir: str, app_id: int, added_bytes: int = 0) -> Optional[tuple[int, str]]:
+    """appmanifest의 BytesDownloaded/BytesToDownload로 읽은 받기 진행률. 받을 양을 모르면 None.
+
+    SteamCMD는 받는 동안 BytesDownloaded를 거의 갱신하지 않는다(0에 머물다 끝에 한꺼번에).
+    디스크에 늘어난 크기(*added_bytes*)가 받을 양 안이면 그만큼 받은 것으로 본다. 넘으면 미리 잡은 파일이라 믿지 않는다.
+    """
     manifest = resolve_manifest_path(install_dir, app_id)
     if manifest is None:
         return None
@@ -140,6 +144,8 @@ def _manifest_progress(install_dir: str, app_id: int) -> Optional[tuple[int, str
     if not to_download or not downloaded or int(to_download.group(1)) <= 0:
         return None
     total, done = int(to_download.group(1)), min(int(downloaded.group(1)), int(to_download.group(1)))
+    if done < added_bytes < total:
+        done = added_bytes
     pct = min(int(done * 100 / total), 99)
     return pct, f"Downloading: {done / 1_048_576:.0f}/{total / 1_048_576:.0f} MB ({pct}%)"
 
@@ -424,22 +430,27 @@ class SteamCMD:
                 heartbeat_counter += 1
 
                 # stdout 파싱 결과가 있으면 우선 사용 (SteamCMD가 flush한 경우)
-                manifest_progress = None if parsed_pct[0] > 0 else _manifest_progress(str(install_dir), app_id)
                 if parsed_pct[0] > 0:
                     pct = parsed_pct[0]
                     msg = parsed_msg[0]
-                elif manifest_progress is not None:
-                    # SteamCMD가 받으면서 갱신하는 appmanifest의 받은 바이트/받을 바이트
-                    pct, msg = manifest_progress
                 else:
-                    # 디스크 사용량 기반 추정 (install_dir + steamcmd 캐시)
+                    # 디스크 사용량 (install_dir + steamcmd 캐시)
                     current_size = _dir_size(install_dir)
                     if steamcmd_cache.exists() and steamcmd_cache.parent != install_dir:
                         current_size += _dir_size(steamcmd_cache)
-                    # total 결정: stdout 파싱 > 알려진 앱 크기 > 없음
-                    pct, msg = _disk_progress(current_size - initial_size, parsed_total[0] or estimated_total)
-                    if pct is None:
-                        pct = max(last_pct, 0)
+                    added = current_size - initial_size
+                    manifest_progress = _manifest_progress(str(install_dir), app_id, added)
+                    if manifest_progress is not None:
+                        # appmanifest의 받을 바이트를 총량으로
+                        pct, msg = manifest_progress
+                    else:
+                        # total 결정: stdout 파싱 > 알려진 앱 크기 > 없음
+                        pct, msg = _disk_progress(added, parsed_total[0] or estimated_total)
+                        if pct is None:
+                            pct = max(last_pct, 0)
+                # 어림의 근거가 바뀌어도(디스크 → appmanifest) 진행률과 문구는 뒤로 가지 않는다
+                if pct < last_pct:
+                    pct, msg = last_pct, last_msg
 
                 # 메시지 또는 퍼센티지가 변할 때마다 보고 + 10사이클(20초)마다 heartbeat
                 if msg != last_msg or pct != last_pct or heartbeat_counter >= 10:

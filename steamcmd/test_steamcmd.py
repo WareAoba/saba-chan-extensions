@@ -892,6 +892,47 @@ def test_install_progress_does_not_jump_to_99_when_files_are_preallocated(fake_s
     assert max(during) < 5
 
 
+def test_manifest_progress_uses_disk_growth_while_the_manifest_lags(tmp_path):
+    """SteamCMD는 받는 동안 BytesDownloaded를 거의 갱신하지 않는다 (PC 실측 10-26: 0/1878 MB에 80초 멈춤 뒤 99%).
+    디스크에 늘어난 크기가 받을 양 안이면 그만큼 받은 것으로 본다."""
+    mb = 1_048_576
+    steamapps = tmp_path / "steamapps"
+    steamapps.mkdir()
+    (steamapps / "appmanifest_380870.acf").write_text(
+        f'"AppState"\n{{\n\t"BytesToDownload"\t\t"{1878 * mb}"\n\t"BytesDownloaded"\t\t"0"\n}}\n', encoding="utf-8")
+    assert steamcmd_mod._manifest_progress(str(tmp_path), 380870, 939 * mb) == (50, "Downloading: 939/1878 MB (50%)")
+    # 미리 잡은 파일로 받을 양을 넘은 크기는 믿지 않는다
+    assert steamcmd_mod._manifest_progress(str(tmp_path), 380870, 7000 * mb) == (0, "Downloading: 0/1878 MB (0%)")
+
+
+def test_install_progress_never_goes_back_when_the_manifest_appears(fake_steamcmd, tmp_path, monkeypatch):
+    """디스크 어림 2% 다음에 appmanifest(받은 양 0)가 생겨도 0%로 돌아가지 않고, 받는 동안 계속 오른다."""
+    install_with, _ = fake_steamcmd
+    mb = 1_048_576
+    steamapps = tmp_path / "server" / "steamapps"
+    sizes = [0, 130 * mb, 400 * mb, 900 * mb, 1400 * mb]
+    calls = [0]
+
+    def dir_size(path):
+        i = min(calls[0], len(sizes) - 1)
+        calls[0] += 1
+        if i == 1:
+            steamapps.mkdir(parents=True, exist_ok=True)
+            (steamapps / "appmanifest_380870.acf").write_text(
+                f'"AppState"\n{{\n\t"BytesToDownload"\t\t"{1878 * mb}"\n\t"BytesDownloaded"\t\t"0"\n}}\n', encoding="utf-8")
+        return sizes[i]
+
+    monkeypatch.setattr(steamcmd_mod, "_dir_size", dir_size)
+    reported = []
+    messages = []
+    monkeypatch.setattr(steamcmd_mod, "_progress", lambda pct, msg: (reported.append(pct), messages.append(msg)))
+    install_with(_FakeProc(finish_after=4))
+    during = reported[:-1]
+    assert during == sorted(during), during
+    assert during[-1] >= 70, during
+    assert "Downloading: 0/1878 MB (0%)" not in messages, messages
+
+
 def test_install_for_module_reads_the_app_from_module_toml(tmp_path):
     """앱 ID·익명 로그인·베타는 모듈 module.toml [install] 한 곳에서 읽는다 (모듈 코드에 다시 적지 않는다)"""
     from extensions.steamcmd import install_for_module
