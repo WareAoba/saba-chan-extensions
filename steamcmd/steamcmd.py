@@ -448,8 +448,9 @@ class SteamCMD:
                         pct, msg = _disk_progress(added, parsed_total[0] or estimated_total)
                         if pct is None:
                             pct = max(last_pct, 0)
-                # 어림의 근거가 바뀌어도(디스크 → appmanifest) 진행률은 뒤로 가지 않는다
-                pct = max(pct, last_pct)
+                # 어림의 근거가 바뀌어도(디스크 → appmanifest) 진행률과 문구는 뒤로 가지 않는다
+                if pct < last_pct:
+                    pct, msg = last_pct, last_msg
 
                 # 메시지 또는 퍼센티지가 변할 때마다 보고 + 10사이클(20초)마다 heartbeat
                 if msg != last_msg or pct != last_pct or heartbeat_counter >= 10:

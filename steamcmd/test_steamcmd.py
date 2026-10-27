@@ -924,11 +924,13 @@ def test_install_progress_never_goes_back_when_the_manifest_appears(fake_steamcm
 
     monkeypatch.setattr(steamcmd_mod, "_dir_size", dir_size)
     reported = []
-    monkeypatch.setattr(steamcmd_mod, "_progress", lambda pct, msg: reported.append(pct))
+    messages = []
+    monkeypatch.setattr(steamcmd_mod, "_progress", lambda pct, msg: (reported.append(pct), messages.append(msg)))
     install_with(_FakeProc(finish_after=4))
     during = reported[:-1]
     assert during == sorted(during), during
     assert during[-1] >= 70, during
+    assert "Downloading: 0/1878 MB (0%)" not in messages, messages
 
 
 def test_install_for_module_reads_the_app_from_module_toml(tmp_path):
