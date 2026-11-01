@@ -452,3 +452,44 @@ def test_a_failed_in_place_write_restores_the_original(tmp_path):
     out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30)
     assert "failed" in out.stdout, out.stderr
     assert ini.read_bytes() == b"original"
+
+
+def test_keys_declared_as_strings_stay_quoted_even_when_the_value_looks_like_a_number(tmp_path):
+    """숫자·nan·inf처럼 보이는 비밀번호도 문자열 키면 따옴표로 쓴다 (값 모양으로만 가리면 틀린다)"""
+    path = str(tmp_path / "Settings.ini")
+    props = {"ServerPassword": "12345678", "AdminPassword": "nan", "ServerName": "inf", "Region": " 12 ", "ExpRate": "2.5"}
+    assert write_option_settings(path, props, quoted_keys={"ServerPassword", "AdminPassword", "ServerName", "Region"})
+    text = open(path, encoding="utf-8").read()
+    assert 'ServerPassword="12345678"' in text and 'AdminPassword="nan"' in text and 'Region=" 12 "' in text
+    assert "ExpRate=2.5" in text
+    assert parse_option_settings(path) == props
+
+
+def test_nan_inf_and_padded_numbers_are_not_written_as_bare_numbers(tmp_path):
+    path = str(tmp_path / "Settings.ini")
+    props = {"A": "nan", "B": "inf", "C": " 12 ", "D": "1_0", "E": "-3", "F": "0.500000"}
+    assert write_option_settings(path, props)
+    text = open(path, encoding="utf-8").read()
+    assert 'A="nan"' in text and 'B="inf"' in text and 'C=" 12 "' in text and 'D="1_0"' in text
+    assert "E=-3" in text and "F=0.500000" in text
+    assert parse_option_settings(path) == props
+
+
+def test_bare_keys_write_enum_names_without_quotes(tmp_path):
+    """Difficulty=None, DeathPenalty=All 처럼 열거형은 공식 기본 파일과 같이 따옴표 없이 쓴다"""
+    path = str(tmp_path / "Settings.ini")
+    props = {"Difficulty": "None", "DeathPenalty": "All", "DenyTechnologyList": "", "ServerName": "x"}
+    assert write_option_settings(path, props, bare_keys={"Difficulty", "DeathPenalty", "DenyTechnologyList"})
+    text = open(path, encoding="utf-8").read()
+    assert "Difficulty=None,DeathPenalty=All,DenyTechnologyList=,ServerName=\"x\"" in text
+    assert parse_option_settings(path) == props
+
+
+def test_a_value_with_a_line_break_is_refused_and_the_file_is_untouched(tmp_path):
+    """줄바꿈이 든 값은 OptionSettings 줄을 잘라 다른 키·깨진 파일을 만든다"""
+    path = tmp_path / "Settings.ini"
+    path.write_text("[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName=\"keep\")\n", encoding="utf-8")
+    before = path.read_bytes()
+    for bad in ("x\ny", "x\r\ny", "x\ry"):
+        assert write_option_settings(str(path), {"ServerName": bad}) is False
+    assert path.read_bytes() == before

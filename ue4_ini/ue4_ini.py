@@ -144,6 +144,9 @@ def _group_end(raw, start):
     return len(raw) + 1
 
 
+_NUMBER = re.compile(r"[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?")
+
+
 def _should_quote(value):
     """Determine if a value needs quoting in UE4 INI OptionSettings.
 
@@ -156,12 +159,8 @@ def _should_quote(value):
         return False
     if value in ("True", "False"):
         return False
-    try:
-        float(value)
-        return False
-    except ValueError:
-        pass
-    return True
+    # float()로 가리면 nan·inf·"1_0"·" 12 "도 숫자가 된다: 글자 모양만 숫자로 본다
+    return not _NUMBER.fullmatch(value)
 
 
 def _quote(value):
@@ -170,13 +169,15 @@ def _quote(value):
     return f'"{escaped}"'
 
 
-def _format_option_settings(props):
+def _format_option_settings(props, quoted_keys=(), bare_keys=()):
     parts = []
     for key, value in props.items():
         # UE4 INI: string values must be quoted; booleans, numbers,
         # and parenthesized groups (e.g. CrossplayPlatforms=(Steam,Xbox))
-        # stay unquoted.
-        if isinstance(value, str) and _should_quote(value):
+        # stay unquoted. 호출한 모듈이 형식을 아는 키는 값 모양과 상관없이 따른다.
+        if key in bare_keys:
+            parts.append(f"{key}={value}")
+        elif isinstance(value, str) and (key in quoted_keys or _should_quote(value)):
             parts.append(f"{key}={_quote(value)}")
         else:
             parts.append(f"{key}={value}")
@@ -207,7 +208,7 @@ def _merge_option_settings(lines, header, option_line):
     return lines
 
 
-def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSettings]"):
+def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSettings]", quoted_keys=(), bare_keys=()):
     """Write dict back to UE4 INI OptionSettings format.
 
     기존 파일이 있으면 해당 섹션의 OptionSettings 줄만 바꾼다.
@@ -217,12 +218,17 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
         ini_path: Path to the .ini file.
         props: dict of key-value pairs.
         section: INI section header, with or without brackets (default: Palworld settings).
+        quoted_keys: 값이 숫자·nan처럼 보여도 항상 따옴표로 쓸 문자열 키 (비밀번호, 서버 이름 등).
+        bare_keys: 항상 따옴표 없이 쓸 키 (열거형 Difficulty=None, 빈 목록 등).
 
     Returns:
-        True on success, False on OSError.
+        True on success, False on OSError or a value with a line break (it would cut the OptionSettings line).
     """
+    if any(isinstance(v, str) and ("\n" in v or "\r" in v) for v in props.values()):
+        print("[ue4_ini] write refused: value with a line break", file=sys.stderr)
+        return False
     header = section if section.startswith("[") else f"[{section}]"
-    option_line = _format_option_settings(props)
+    option_line = _format_option_settings(props, quoted_keys, bare_keys)
     # 링크면 가리키는 파일을 고친다 (교체가 링크를 일반 파일로 바꾸지 않게)
     ini_path = os.path.realpath(ini_path)
     try:
