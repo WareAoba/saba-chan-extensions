@@ -1,4 +1,19 @@
-# saba-chan-extensions
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/banner-ko-dark.png">
+  <img src="docs/images/banner-ko-light.png" width="312" alt="사바쨩">
+</picture>
+
+### saba-chan-extensions
+
+몇몇 게임 모듈이 기대는 기능을 따로 담은 익스텐션
+
+[웹사이트](https://saba-chan.online/ko) · [사용 안내](https://saba-chan.online/ko/guide) · [사바쨩](https://github.com/WareAoba/saba-chan) · [모듈](https://github.com/WareAoba/saba-chan-modules)
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-7c3aed?style=flat-square)](LICENSE)
+
+</div>
 
 [사바쨩](https://saba-chan.online)에 기능을 더하는 익스텐션 모음이에요. 모든 게임에 필요하진 않지만 몇몇 게임 모듈이 기대는 기능들을 여기에 따로 두고, 필요한 것만 켜서 씁니다. 사바쨩 본체는 [WareAoba/saba-chan](https://github.com/WareAoba/saba-chan)에, 게임 모듈은 [saba-chan-modules](https://github.com/WareAoba/saba-chan-modules)에 있어요.
 
