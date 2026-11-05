@@ -69,48 +69,56 @@ def parse_option_settings(ini_path):
         m = re.search(r'OptionSettings=\((.+)\)', content)
         if not m:
             return {}
-        raw = m.group(1)
-
-        props = {}
-        i = 0
-        while i < len(raw):
-            eq = raw.find("=", i)
-            if eq == -1:
-                break
-            key = raw[i:eq].strip()
-            i = eq + 1
-            if i < len(raw) and raw[i] == '"':
-                # Quoted value — \" 와 \\ 이스케이프를 해제한다
-                chars = []
-                i += 1
-                while i < len(raw) and raw[i] != '"':
-                    if raw[i] == "\\" and i + 1 < len(raw):
-                        i += 1
-                    chars.append(raw[i])
-                    i += 1
-                value = "".join(chars)
-                i += 1  # 닫는 따옴표
-                if i < len(raw) and raw[i] == ',':
-                    i += 1
-            elif i < len(raw) and raw[i] == '(':
-                # Parenthesized value like CrossplayPlatforms=(Steam,Xbox)
-                start = i
-                i = min(_group_end(raw, start), len(raw))
-                value = raw[start:i]
-                if i < len(raw) and raw[i] == ',':
-                    i += 1
-            else:
-                comma = raw.find(",", i)
-                if comma == -1:
-                    value = raw[i:].strip()
-                    i = len(raw)
-                else:
-                    value = raw[i:comma].strip()
-                    i = comma + 1
-            props[key] = value
-        return props
+        return {key: value for key, (value, _) in _split_option_settings(m.group(1)).items()}
     except OSError:
         return {}
+
+
+def _split_option_settings(raw):
+    """OptionSettings 괄호 안을 {키: (값, 원문 토큰)}으로 나눈다. 원문은 쓰기에서 손대지 않은 값을 그대로 두는 데 쓴다."""
+    props = {}
+    i = 0
+    while i < len(raw):
+        eq = raw.find("=", i)
+        if eq == -1:
+            break
+        key = raw[i:eq].strip()
+        i = eq + 1
+        if i < len(raw) and raw[i] == '"':
+            # Quoted value — \" 와 \\ 만 이스케이프다. 그 밖의 \n·C:\Saves 등은 백슬래시를 남긴다
+            start = i
+            chars = []
+            i += 1
+            while i < len(raw) and raw[i] != '"':
+                if raw[i] == "\\" and i + 1 < len(raw):
+                    i += 1
+                    if raw[i] not in ('"', "\\"):
+                        chars.append("\\")
+                chars.append(raw[i])
+                i += 1
+            value = "".join(chars)
+            i += 1  # 닫는 따옴표
+            token = raw[start:i]
+            if i < len(raw) and raw[i] == ',':
+                i += 1
+        elif i < len(raw) and raw[i] == '(':
+            # Parenthesized value like CrossplayPlatforms=(Steam,Xbox)
+            start = i
+            i = min(_group_end(raw, start), len(raw))
+            value = token = raw[start:i]
+            if i < len(raw) and raw[i] == ',':
+                i += 1
+        else:
+            comma = raw.find(",", i)
+            if comma == -1:
+                value = raw[i:].strip()
+                i = len(raw)
+            else:
+                value = raw[i:comma].strip()
+                i = comma + 1
+            token = value
+        props[key] = (value, token)
+    return props
 
 
 def _is_group(value):
@@ -169,7 +177,9 @@ def _quote(value):
     return f'"{escaped}"'
 
 
-def _format_option_settings(props, quoted_keys=(), bare_keys=()):
+def _format_option_settings(props, quoted_keys=(), bare_keys=(), original=None):
+    """original: 파일에 있던 {키: (값, 원문 토큰)}. 값이 그대로인 따옴표 값은 원문을 다시 쓴다 (사용자가 쓴 이스케이프를 지킨다)."""
+    original = original or {}
     parts = []
     for key, value in props.items():
         # UE4 INI: string values must be quoted; booleans, numbers,
@@ -178,10 +188,24 @@ def _format_option_settings(props, quoted_keys=(), bare_keys=()):
         if key in bare_keys:
             parts.append(f"{key}={value}")
         elif isinstance(value, str) and (key in quoted_keys or _should_quote(value)):
-            parts.append(f"{key}={_quote(value)}")
+            old_value, old_token = original.get(key, (None, ""))
+            token = old_token if old_value == value and old_token.startswith('"') else _quote(value)
+            parts.append(f"{key}={token}")
         else:
             parts.append(f"{key}={value}")
     return f"OptionSettings=({','.join(parts)})"
+
+
+def _find_option_line(lines, header):
+    """(*header* 줄 위치, 그 섹션의 OptionSettings 줄 위치). 섹션이 없으면 (None, None), 줄이 없으면 (헤더, None)."""
+    start = next((i for i, line in enumerate(lines) if line.strip() == header), None)
+    if start is None:
+        return None, None
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")),
+        len(lines),
+    )
+    return start, next((i for i in range(start + 1, end) if lines[i].lstrip().startswith("OptionSettings=")), None)
 
 
 def _merge_option_settings(lines, header, option_line):
@@ -189,21 +213,14 @@ def _merge_option_settings(lines, header, option_line):
 
     섹션이 없으면 끝에 추가하고, 섹션에 OptionSettings가 없으면 헤더 바로 뒤에 넣는다.
     """
-    try:
-        start = next(i for i, line in enumerate(lines) if line.strip() == header)
-    except StopIteration:
+    start, found = _find_option_line(lines, header)
+    if start is None:
         if lines and lines[-1].strip():
             lines.append("")
         return lines + [header, option_line]
-
-    end = next(
-        (i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")),
-        len(lines),
-    )
-    for i in range(start + 1, end):
-        if lines[i].lstrip().startswith("OptionSettings="):
-            lines[i] = option_line
-            return lines
+    if found is not None:
+        lines[found] = option_line
+        return lines
     lines.insert(start + 1, option_line)
     return lines
 
@@ -228,7 +245,6 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
         print("[ue4_ini] write refused: value with a line break", file=sys.stderr)
         return False
     header = section if section.startswith("[") else f"[{section}]"
-    option_line = _format_option_settings(props, quoted_keys, bare_keys)
     # 링크면 가리키는 파일을 고친다 (교체가 링크를 일반 파일로 바꾸지 않게)
     ini_path = os.path.realpath(ini_path)
     try:
@@ -246,6 +262,12 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
             if "\r\n" in content:
                 newline = "\r\n"
             lines = content.splitlines()
+        original = {}
+        _, found = _find_option_line(lines, header)
+        m = re.search(r"OptionSettings=\((.+)\)", lines[found]) if found is not None else None
+        if m:
+            original = _split_option_settings(m.group(1))
+        option_line = _format_option_settings(props, quoted_keys, bare_keys, original)
         lines = _merge_option_settings(lines, header, option_line)
         text = newline.join(lines) + newline
         try:

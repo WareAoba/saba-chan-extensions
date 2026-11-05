@@ -233,6 +233,20 @@ def test_write_escapes_quotes_and_roundtrips(tmp_path):
     assert parse_option_settings(str(path)) == props
 
 
+def test_backslashes_the_user_wrote_survive_a_write_of_other_keys(tmp_path):
+    """\\" 와 \\\\ 만 이스케이프다: \\n·C:\\Saves의 백슬래시를 읽기에서 지우지 않고, 손대지 않은 값은 원문대로 다시 쓴다"""
+    path = tmp_path / "settings.ini"
+    original = 'ServerDescription="Line1\\nLine2 C:\\Saves",AdminPassword="a\\b\\\\c"'
+    path.write_text(f"[/Script/Pal.PalGameWorldSettings]\nOptionSettings=({original},ServerName=\"A\")\n", encoding="utf-8")
+    props = parse_option_settings(str(path))
+    assert props["ServerDescription"] == "Line1\\nLine2 C:\\Saves"
+    assert props["AdminPassword"] == "a\\b\\c"
+    props["ServerName"] = "B"
+    assert write_option_settings(str(path), props)
+    assert f"OptionSettings=({original},ServerName=\"B\")" in path.read_text(encoding="utf-8")
+    assert parse_option_settings(str(path)) == props
+
+
 def test_write_matches_section_after_bom_and_keeps_bom(tmp_path):
     path = tmp_path / "settings.ini"
     path.write_bytes("[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Port=1)\n".encode("utf-8-sig"))
