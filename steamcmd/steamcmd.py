@@ -1021,9 +1021,23 @@ def _extract_archive(data: bytes, name: str, dest: Path) -> None:
                         raise ValueError(f"Unsupported archive member type: {member.name}")
                 extra = {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
                 tf.extractall(tmp, members=members, **extra)
+        _check_move_targets(tmp, dest, dest)
         _move_tree(tmp, dest)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _check_move_targets(src: Path, dest: Path, root: Path) -> None:
+    """옮기기 전에 *dest* 쪽 실제 경로를 검사한다. 이미 있는 링크를 따라 *root* 밖으로 나가면
+    아무것도 옮기지 않고 ValueError."""
+    for child in src.iterdir():
+        target = dest / child.name
+        if target.is_symlink():
+            raise ValueError(f"Refusing to extract over a link: {target}")
+        if not target.resolve().is_relative_to(root):
+            raise ValueError(f"Archive member escapes destination: {target}")
+        if child.is_dir() and not child.is_symlink() and target.is_dir():
+            _check_move_targets(child, target, root)
 
 
 def _move_tree(src: Path, dest: Path) -> None:

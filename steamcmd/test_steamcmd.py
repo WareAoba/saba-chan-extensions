@@ -1054,3 +1054,18 @@ def test_install_explicit_validate_is_honoured(fake_steamcmd, tmp_path, explicit
     _write_acf(tmp_path / "server", 4 if explicit else 1026)
     install_with(_FakeProc(b"Success! App\n"), validate=explicit)
     assert ("validate" in calls[0][0]) is explicit
+
+
+def test_extract_refuses_existing_link_in_dest(tmp_path):
+    dest = tmp_path / "dest"
+    outside = tmp_path / "outside"
+    dest.mkdir()
+    outside.mkdir()
+    (outside / "file.txt").write_text("keep")
+    try:
+        (dest / "sub").symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable")
+    with pytest.raises(ValueError):
+        steamcmd_mod._extract_archive(_zip_bytes({"sub/file.txt": b"x"}), "x.zip", dest)
+    assert (outside / "file.txt").read_text() == "keep"
