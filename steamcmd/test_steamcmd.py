@@ -1033,9 +1033,10 @@ def test_install_validates_on_first_install(fake_steamcmd):
     assert "validate" in calls[0][0]
 
 
-def test_install_skips_validate_for_a_fully_installed_update(fake_steamcmd, tmp_path):
+@pytest.mark.parametrize("flags", [4, 6])  # 6 = 설치 완료 + 업데이트 필요: 평소 업데이트
+def test_install_skips_validate_for_a_fully_installed_update(fake_steamcmd, tmp_path, flags):
     install_with, calls = fake_steamcmd
-    _write_acf(tmp_path / "server", 4)
+    _write_acf(tmp_path / "server", flags)
     install_with(_FakeProc(b"Success! App\n"))
     assert "validate" not in calls[0][0]
 

@@ -140,7 +140,11 @@ def _manifest_bytes(install_dir: str, app_id: int) -> dict[str, int]:
 
 
 def _fully_installed(install_dir: str, app_id: int) -> bool:
-    """appmanifest의 StateFlags가 4(FullyInstalled)면 True. 매니페스트가 없거나 못 읽으면 False."""
+    """appmanifest의 StateFlags에 FullyInstalled(4)가 있고 끊긴 받기·손상 표시가 없으면 True.
+
+    UpdateRequired(2)만 더해진 6은 평소 업데이트라 True다. Invalid(1)·FilesMissing(32)·FilesCorrupt(128)·
+    UpdateRunning(256)·UpdatePaused(512)·UpdateStarted(1024)가 있으면 앞선 받기가 끝나지 않은 것으로 본다.
+    매니페스트가 없거나 못 읽으면 False."""
     manifest = resolve_manifest_path(install_dir, app_id)
     if manifest is None:
         return False
@@ -149,7 +153,10 @@ def _fully_installed(install_dir: str, app_id: int) -> bool:
     except OSError:
         return False
     m = re.search(r'"StateFlags"\s+"(\d+)"', content)
-    return bool(m) and int(m.group(1)) == 4
+    if not m:
+        return False
+    flags = int(m.group(1))
+    return bool(flags & 4) and not flags & (1 | 32 | 128 | 256 | 512 | 1024)
 
 
 def _manifest_progress(install_dir: str, app_id: int, added_bytes: int = 0,
