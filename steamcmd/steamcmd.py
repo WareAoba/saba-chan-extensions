@@ -32,6 +32,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 import threading
 import time
 import traceback
@@ -136,6 +137,19 @@ def _manifest_bytes(install_dir: str, app_id: int) -> dict[str, int]:
     except OSError:
         return {}
     return {key: int(value) for key, value in re.findall(r'"(Bytes\w+)"\s+"(\d+)"', content)}
+
+
+def _fully_installed(install_dir: str, app_id: int) -> bool:
+    """appmanifest의 StateFlags가 4(FullyInstalled)면 True. 매니페스트가 없거나 못 읽으면 False."""
+    manifest = resolve_manifest_path(install_dir, app_id)
+    if manifest is None:
+        return False
+    try:
+        content = manifest.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    m = re.search(r'"StateFlags"\s+"(\d+)"', content)
+    return bool(m) and int(m.group(1)) == 4
 
 
 def _manifest_progress(install_dir: str, app_id: int, added_bytes: int = 0,
@@ -325,13 +339,17 @@ class SteamCMD:
         beta: Optional[str] = None,
         beta_password: Optional[str] = None,
         platform_override: Optional[str] = None,
-        validate: bool = True,
+        validate: Optional[bool] = None,
         timeout: Optional[float] = _INSTALL_BUDGET,
     ) -> dict[str, Any]:
         """Run ``steamcmd +app_update`` to install or update a game server.
 
         *timeout* 는 재시도와 이 객체의 SteamCMD 받기를 포함한 전체 제한 시간(초)이다. 넘기면 steamcmd를
         종료하고 실패를 반환한다. ``None`` 이면 제한하지 않는다.
+
+        *validate* 가 ``None``(기본)이면 첫 설치이거나 앞선 설치가 끝나지 않은 경우(appmanifest가 없거나
+        StateFlags가 4가 아님)에만 ``validate`` 를 붙인다. 끝까지 설치된 서버의 매 업데이트마다 전체 파일을
+        다시 검증하지 않기 위해서다. ``True``/``False`` 를 넘기면 그대로 따른다.
 
         Returns a dict with ``success``, ``message``, ``install_dir``,
         ``app_id`` keys.
@@ -370,6 +388,8 @@ class SteamCMD:
             args += ["-beta", beta]
             if beta_password:
                 args += ["-betapassword", beta_password]
+        if validate is None:
+            validate = not _fully_installed(str(install_dir), app_id)
         if validate:
             args.append("validate")
 
@@ -973,23 +993,41 @@ def _extract_archive(data: bytes, name: str, dest: Path) -> None:
     """zip 또는 tar.gz 아카이브를 *dest* 에 안전하게 푼다.
 
     모든 항목 경로를 먼저 검사한다. 하나라도 *dest* 밖을 가리키면 아무것도 풀지 않는다.
-    tar의 링크·장치 파일은 거부한다.
+    tar의 링크·장치 파일은 거부한다. *dest* 옆 임시 폴더에 풀고 끝나면 옮기므로,
+    중간에 실패해도 *dest* 에는 반쯤 풀린 파일이 남지 않는다.
     """
     dest = Path(dest).resolve()
-    if name.endswith(".zip"):
-        with zipfile.ZipFile(io.BytesIO(data)) as zf:
-            for member in zf.namelist():
-                _safe_member_path(dest, member)
-            zf.extractall(dest)
-        return
-    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
-        members = tf.getmembers()
-        for member in members:
-            _safe_member_path(dest, member.name)
-            if not (member.isfile() or member.isdir()):
-                raise ValueError(f"Unsupported archive member type: {member.name}")
-        extra = {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
-        tf.extractall(dest, members=members, **extra)
+    dest.mkdir(parents=True, exist_ok=True)
+    tmp = Path(tempfile.mkdtemp(prefix=".extract-", dir=dest.parent))
+    try:
+        if name.endswith(".zip"):
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                for member in zf.namelist():
+                    _safe_member_path(tmp.resolve(), member)
+                zf.extractall(tmp)
+        else:
+            with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
+                members = tf.getmembers()
+                for member in members:
+                    _safe_member_path(tmp.resolve(), member.name)
+                    if not (member.isfile() or member.isdir()):
+                        raise ValueError(f"Unsupported archive member type: {member.name}")
+                extra = {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
+                tf.extractall(tmp, members=members, **extra)
+        _move_tree(tmp, dest)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _move_tree(src: Path, dest: Path) -> None:
+    """*src* 의 내용을 *dest* 로 옮긴다 (같은 이름의 파일은 덮어쓴다)."""
+    for child in src.iterdir():
+        target = dest / child.name
+        if child.is_dir() and not child.is_symlink():
+            target.mkdir(exist_ok=True)
+            _move_tree(child, target)
+        else:
+            os.replace(child, target)
 
 
 # ── Plugin runner interface ──────────────────────────────────────

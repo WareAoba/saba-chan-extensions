@@ -66,12 +66,27 @@ def parse_option_settings(ini_path):
         return {}
     try:
         content, _ = _read_text(ini_path)
-        m = re.search(r'OptionSettings=\((.+)\)', content)
-        if not m:
+        body = _option_settings_body(content)
+        if body is None:
             return {}
-        return {key: value for key, (value, _) in _split_option_settings(m.group(1)).items()}
+        return {key: value for key, (value, _) in _split_option_settings(body).items()}
     except OSError:
         return {}
+
+
+def _option_settings_body(text):
+    """`OptionSettings=(...)` 줄의 바깥 괄호 안쪽. 괄호·따옴표를 따라 제대로 닫힌 경우만 받고,
+    닫는 괄호가 없거나 짝이 안 맞으면 None (읽을 수 없음 — 일부만 읽어 손상을 놓치지 않는다)."""
+    m = re.search(r"OptionSettings=\(", text)
+    if not m:
+        return None
+    start = m.end() - 1
+    line_end = text.find("\n", start)
+    line = (text[:line_end] if line_end != -1 else text).rstrip("\r")
+    end = _group_end(line, start)
+    if end > len(line):
+        return None
+    return line[start + 1:end - 1]
 
 
 def _split_option_settings(raw):
@@ -264,9 +279,9 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
             lines = content.splitlines()
         original = {}
         _, found = _find_option_line(lines, header)
-        m = re.search(r"OptionSettings=\((.+)\)", lines[found]) if found is not None else None
-        if m:
-            original = _split_option_settings(m.group(1))
+        body = _option_settings_body(lines[found]) if found is not None else None
+        if body is not None:
+            original = _split_option_settings(body)
         option_line = _format_option_settings(props, quoted_keys, bare_keys, original)
         lines = _merge_option_settings(lines, header, option_line)
         text = newline.join(lines) + newline

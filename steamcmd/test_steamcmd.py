@@ -1001,3 +1001,55 @@ def test_install_for_module_needs_a_steamcmd_app(tmp_path):
     (tmp_path / "module.toml").write_text("[module]\nname = \"g\"\n\n[install]\nmethod = \"download\"\n", encoding="utf-8")
     with pytest.raises(ValueError):
         install_for_module(tmp_path, tmp_path / "server")
+
+
+def test_extract_archive_failure_leaves_dest_untouched(tmp_path, monkeypatch):
+    """풀다가 실패해도 dest에는 반쯤 풀린 파일이 남지 않는다 (임시 폴더에 풀고 옮긴다)."""
+    dest = tmp_path / "out"
+    dest.mkdir()
+    (dest / "keep.txt").write_text("old")
+    orig = zipfile.ZipFile.extractall
+
+    def boom(self, path=None, members=None, pwd=None):
+        orig(self, path)
+        raise OSError("disk full")
+
+    monkeypatch.setattr(zipfile.ZipFile, "extractall", boom)
+    with pytest.raises(OSError):
+        steamcmd_mod._extract_archive(_zip_bytes({"a.txt": b"1", "b.txt": b"2"}), "x.zip", dest)
+    assert sorted(p.name for p in dest.iterdir()) == ["keep.txt"]
+
+
+def _write_acf(root, state_flags):
+    steamapps = root / "steamapps"
+    steamapps.mkdir(parents=True, exist_ok=True)
+    (steamapps / "appmanifest_380870.acf").write_text(
+        '"AppState"\n{\n\t"appid"\t\t"380870"\n\t"StateFlags"\t\t"%s"\n}\n' % state_flags)
+
+
+def test_install_validates_on_first_install(fake_steamcmd):
+    install_with, calls = fake_steamcmd
+    install_with(_FakeProc(b"Success! App\n"))
+    assert "validate" in calls[0][0]
+
+
+def test_install_skips_validate_for_a_fully_installed_update(fake_steamcmd, tmp_path):
+    install_with, calls = fake_steamcmd
+    _write_acf(tmp_path / "server", 4)
+    install_with(_FakeProc(b"Success! App\n"))
+    assert "validate" not in calls[0][0]
+
+
+def test_install_validates_when_the_previous_install_did_not_finish(fake_steamcmd, tmp_path):
+    install_with, calls = fake_steamcmd
+    _write_acf(tmp_path / "server", 1026)
+    install_with(_FakeProc(b"Success! App\n"))
+    assert "validate" in calls[0][0]
+
+
+@pytest.mark.parametrize("explicit", [True, False])
+def test_install_explicit_validate_is_honoured(fake_steamcmd, tmp_path, explicit):
+    install_with, calls = fake_steamcmd
+    _write_acf(tmp_path / "server", 4 if explicit else 1026)
+    install_with(_FakeProc(b"Success! App\n"), validate=explicit)
+    assert ("validate" in calls[0][0]) is explicit
