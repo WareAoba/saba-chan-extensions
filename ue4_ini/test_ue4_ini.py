@@ -507,3 +507,21 @@ def test_a_value_with_a_line_break_is_refused_and_the_file_is_untouched(tmp_path
     for bad in ("x\ny", "x\r\ny", "x\ry"):
         assert write_option_settings(str(path), {"ServerName": bad}) is False
     assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("line", [
+    "OptionSettings=(Difficulty=None,ServerName=\"x\"",              # 닫는 괄호 없음
+    "OptionSettings=(A=1,B=(Steam,Xbox,C=3)",                         # 안쪽 괄호 짝 안 맞음
+    "OptionSettings=(A=1,B=\"unclosed)",                              # 따옴표가 닫히지 않음
+])
+def test_parse_unclosed_option_line_is_unreadable(tmp_path, line):
+    """닫는 괄호가 없거나 짝이 안 맞으면 일부만 읽지 않고 빈 dict (호출 모듈이 손상으로 본다)."""
+    ini = tmp_path / "s.ini"
+    ini.write_text("[/Script/X.Y]\n" + line + "\n", encoding="utf-8")
+    assert parse_option_settings(str(ini)) == {}
+
+
+def test_parse_closed_outer_paren_with_nested_and_quoted_parens(tmp_path):
+    ini = tmp_path / "s.ini"
+    ini.write_text('[/Script/X.Y]\nOptionSettings=(A=1,B=(Steam,Xbox),C="a)b")\n', encoding="utf-8")
+    assert parse_option_settings(str(ini)) == {"A": "1", "B": "(Steam,Xbox)", "C": "a)b"}
