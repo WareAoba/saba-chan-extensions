@@ -17,6 +17,6 @@
   },
   "author": "WareAoba",
   "min_app_version": "0.1.11",
-  "dependencies": [],
+  "dependencies": {},
   "permissions": { "network": true }
 }
