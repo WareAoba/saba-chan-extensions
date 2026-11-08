@@ -187,48 +187,11 @@ def _portable_dir() -> Path:
     """Return the directory used by saba-chan's portable SteamCMD.
 
     데몬이 준 ``SABA_EXTENSION_DATA_ROOT/steamcmd`` (격리된 실행은 구성요소마다 다른 뿌리를 받는다).
-    없으면 (옛 데몬):
-
-    Windows : ``%APPDATA%/saba-chan/steamcmd``
-    Linux   : ``~/.config/saba-chan/steamcmd``
-    macOS   : ``~/.config/saba-chan/steamcmd``
     """
     root = os.environ.get("SABA_EXTENSION_DATA_ROOT", "")
-    if root:
-        return Path(root) / _PORTABLE_SUBDIR
-    if _SYSTEM == "Windows":
-        base = os.environ.get("APPDATA", "")
-        if not base:
-            raise EnvironmentError("APPDATA environment variable not set")
-        return Path(base) / "saba-chan" / _PORTABLE_SUBDIR
-    else:
-        home = os.environ.get("HOME", "")
-        if not home:
-            raise EnvironmentError("HOME environment variable not set")
-        return Path(home) / ".config" / "saba-chan" / _PORTABLE_SUBDIR
-
-
-def _common_candidates() -> list[Path]:
-    """Well-known SteamCMD installation locations per platform."""
-    candidates: list[Path] = []
-    if _SYSTEM == "Windows":
-        candidates.append(Path(r"C:\SteamCMD\steamcmd.exe"))
-        candidates.append(Path(r"C:\steamcmd\steamcmd.exe"))
-        pf = os.environ.get("ProgramFiles", "")
-        if pf:
-            candidates.append(Path(pf) / "SteamCMD" / "steamcmd.exe")
-        pf86 = os.environ.get("ProgramFiles(x86)", "")
-        if pf86:
-            candidates.append(Path(pf86) / "SteamCMD" / "steamcmd.exe")
-            candidates.append(Path(pf86) / "Steam" / "steamcmd.exe")
-    else:
-        home = os.environ.get("HOME", "")
-        if home:
-            candidates.append(Path(home) / "steamcmd" / "steamcmd.sh")
-            candidates.append(Path(home) / "Steam" / "steamcmd.sh")
-        candidates.append(Path("/usr/games/steamcmd"))
-        candidates.append(Path("/usr/local/bin/steamcmd"))
-    return candidates
+    if not root:
+        raise EnvironmentError("SABA_EXTENSION_DATA_ROOT environment variable not set")
+    return Path(root) / _PORTABLE_SUBDIR
 
 
 # ── Core Class ───────────────────────────────────────────────────
@@ -263,30 +226,15 @@ class SteamCMD:
 
     @staticmethod
     def _detect() -> Optional[Path]:
-        """Try to find an existing SteamCMD binary on this system."""
-        # 1) Our own portable copy
+        """Find the portable SteamCMD under the daemon's data root.
+
+        그 아래 사본만 쓴다 (격리 실행은 시스템 사본을 스스로 업데이트할 수 없다).
+        """
         try:
             portable_exe = _portable_dir() / _EXE_NAME
-            if portable_exe.exists():
-                return portable_exe
         except EnvironmentError:
-            pass
-
-        # 데몬이 뿌리를 주면 그 아래 사본만 쓴다 (격리 실행은 시스템 사본을 스스로 업데이트할 수 없다)
-        if os.environ.get("SABA_EXTENSION_DATA_ROOT"):
             return None
-
-        # 2) Common install locations
-        for candidate in _common_candidates():
-            if candidate.exists():
-                return candidate
-
-        # 3) System PATH
-        found = shutil.which(_EXE_NAME.replace(".exe", "") if _SYSTEM != "Windows" else _EXE_NAME)
-        if found:
-            return Path(found)
-
-        return None
+        return portable_exe if portable_exe.exists() else None
 
     # ── Auto-bootstrap ───────────────────────────────────────
 

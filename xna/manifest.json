@@ -16,7 +16,7 @@
     "fr": "Place une copie figée de Microsoft XNA Framework 4.0 Refresh à côté du serveur de jeu, sans l'installer sur le PC"
   },
   "author": "WareAoba",
-  "min_app_version": "0.1.10",
+  "min_app_version": "0.1.11",
   "dependencies": [],
   "permissions": { "network": true }
 }

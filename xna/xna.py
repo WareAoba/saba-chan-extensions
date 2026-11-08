@@ -92,11 +92,10 @@ def present(target_dir) -> bool:
     return all(_matches(target / name, digest) for _, name, digest in FILES)
 
 
-def _cache_dir() -> Path | None:
+def _cache_dir() -> Path:
     """Verified files are kept in this extension's data folder so the next server does not download again.
-    Sandboxed runs get their own data root from the daemon (``SABA_EXTENSION_DATA_ROOT``)."""
-    root = os.environ.get("SABA_EXTENSION_DATA_ROOT")
-    return Path(root) / "xna" / VERSION if root else None
+    The daemon gives the data root (``SABA_EXTENSION_DATA_ROOT``, its own per sandboxed run)."""
+    return Path(os.environ["SABA_EXTENSION_DATA_ROOT"]) / "xna" / VERSION
 
 
 def _download(url: str, dest: str) -> None:
@@ -235,17 +234,16 @@ def install(target_dir) -> list[str]:
     target = Path(target_dir)
     cache = _cache_dir()
     files: dict[str, bytes] = {}
-    if cache is not None and all(_matches(cache / name, digest) for _, name, digest in FILES):
+    if all(_matches(cache / name, digest) for _, name, digest in FILES):
         files = {name: (cache / name).read_bytes() for _, name, _ in FILES}
     else:
         files = _fetch(target)
-        if cache is not None:
-            try:
-                cache.mkdir(parents=True, exist_ok=True)
-                for name, data in files.items():
-                    _write(cache / name, data)
-            except OSError:
-                pass  # the cache only saves a download next time
+        try:
+            cache.mkdir(parents=True, exist_ok=True)
+            for name, data in files.items():
+                _write(cache / name, data)
+        except OSError:
+            pass  # the cache only saves a download next time
     try:
         for _, name, digest in FILES:
             if not _matches(target / name, digest):
