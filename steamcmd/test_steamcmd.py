@@ -7,7 +7,10 @@
 import io
 import json
 import os
+import subprocess
+import sys
 import tarfile
+import urllib.request
 import zipfile
 from unittest.mock import patch
 
@@ -29,7 +32,7 @@ def offline_steamcmd(tmp_path, monkeypatch):
     def _no_network(*args, **kwargs):
         raise OSError("network disabled in tests")
 
-    monkeypatch.setattr(steamcmd_mod.urllib.request, "urlopen", _no_network)
+    monkeypatch.setattr(urllib.request, "urlopen", _no_network)
     return portable
 
 
@@ -691,19 +694,14 @@ def test_extract_archive_extracts_safe_members(tmp_path, builder, name):
     assert (tmp_path / "sub" / "file.txt").read_bytes() == b"x"
 
 
-def test_cli_reports_errors_as_json_with_exit_zero(capsys):
+def test_cli_reports_errors_as_json_with_exit_zero():
     """데몬은 비정상 종료 코드를 Err로 처리하므로 실패도 exit 0 + JSON으로 보고한다."""
-    def boom(config):
-        raise RuntimeError("kaput")
-
-    code = steamcmd_mod._run_cli({"boom": boom}, ["prog", "boom"], io.StringIO("{}"))
-    out = json.loads(capsys.readouterr().out)
-    assert code == 0
-    assert out == {"success": False, "error": "kaput", "message": "kaput"}
-
-    code = steamcmd_mod._run_cli({}, ["prog", "nope"], io.StringIO(""))
-    out = json.loads(capsys.readouterr().out)
-    assert code == 0 and out["success"] is False and "nope" in out["error"]
+    import daemon_rcon
+    env = dict(os.environ, PYTHONPATH=os.path.dirname(daemon_rcon.__file__))
+    out = subprocess.run([sys.executable, steamcmd_mod.__file__, "nope"], capture_output=True, text=True, env=env, timeout=30)
+    assert out.returncode == 0, out.stderr
+    result = json.loads(out.stdout)
+    assert result["success"] is False and "nope" in result["message"]
 
 
 def test_check_update_flags_a_branch_switch_even_to_an_older_build(tmp_path):
@@ -782,7 +780,7 @@ def test_install_retries_a_transient_exit_8_but_not_a_full_disk(tmp_path, monkey
 
 
 
-def test_first_install_fits_in_the_daemons_install_limit(monkeypatch):
+def test_first_install_fits_in_the_daemons_install_limit(tmp_path, monkeypatch):
     """처음 설치는 SteamCMD 받기(ensure_available)와 설치를 이어서 한다: 받기는 느리게 이어져도 자기 한도에서 끊기고,
     설치 한도는 받기에 쓴 시간을 포함해 데몬 install_server 한도(1800초)보다 짧아 데몬이 Python을 먼저 죽이지 않는다"""
     import inspect
@@ -813,9 +811,9 @@ def test_first_install_fits_in_the_daemons_install_limit(monkeypatch):
         socket_timeouts.append(timeout)
         return _Trickle()
 
-    monkeypatch.setattr(steamcmd_mod.urllib.request, "urlopen", _urlopen)
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen)
     with pytest.raises(TimeoutError):
-        steamcmd_mod._download_bytes("https://example.invalid/steamcmd.zip", timeout=bootstrap)
+        steamcmd_mod._download_archive("https://example.invalid/steamcmd.zip", str(tmp_path / "steamcmd.zip"), timeout=bootstrap)
     assert clock[0] <= bootstrap + steamcmd_mod._READ_TIMEOUT
     assert socket_timeouts == [steamcmd_mod._READ_TIMEOUT]
 
@@ -834,11 +832,10 @@ def test_install_limit_takes_off_only_the_bootstrap_time_actually_spent(fake_ste
         monkeypatch.setattr(steamcmd_mod, "_portable_dir", lambda: portable)
         steam = SteamCMD(explicit_path=str(tmp_path / "missing.exe"))
 
-        def _download(url, *, timeout):
+        def _download(url, dest, *, timeout):
             clock[0] += bootstrap_secs
-            return b""
 
-        monkeypatch.setattr(steamcmd_mod, "_download_bytes", _download)
+        monkeypatch.setattr(steamcmd_mod, "_download_archive", _download)
         monkeypatch.setattr(steamcmd_mod, "_extract_archive", lambda data, url, dest: (dest / steamcmd_mod._EXE_NAME).write_text(""))
     steam.ensure_available()
     monkeypatch.setattr(steamcmd_mod.subprocess, "Popen", lambda *a, **k: _FakeProc(finish_after=None))
@@ -883,7 +880,7 @@ def test_install_progress_does_not_jump_to_99_when_files_are_preallocated(fake_s
     sizes = iter([0, 127 * mb, 7000 * mb])
     monkeypatch.setattr(steamcmd_mod, "_dir_size", lambda path: next(sizes, 7000 * mb))
     reported = []
-    monkeypatch.setattr(steamcmd_mod, "_progress", lambda pct, msg: reported.append(pct))
+    monkeypatch.setattr(steamcmd_mod, "progress", lambda pct, msg: reported.append(pct))
     install_with(_FakeProc(finish_after=3))
     during = reported[:-1]  # 마지막은 설치 완료 100%
     assert 99 not in during
@@ -941,7 +938,7 @@ def test_install_progress_rises_while_preallocated_files_fill(fake_steamcmd, tmp
 
     monkeypatch.setattr(steamcmd_mod, "_dir_size", dir_size)
     reported = []
-    monkeypatch.setattr(steamcmd_mod, "_progress", lambda pct, msg: reported.append(pct))
+    monkeypatch.setattr(steamcmd_mod, "progress", lambda pct, msg: reported.append(pct))
     install_with(_FakeProc(finish_after=5))
     during = reported[:-1]
     assert during == sorted(during), during
@@ -969,7 +966,7 @@ def test_install_progress_never_goes_back_when_the_manifest_appears(fake_steamcm
     monkeypatch.setattr(steamcmd_mod, "_dir_size", dir_size)
     reported = []
     messages = []
-    monkeypatch.setattr(steamcmd_mod, "_progress", lambda pct, msg: (reported.append(pct), messages.append(msg)))
+    monkeypatch.setattr(steamcmd_mod, "progress", lambda pct, msg: (reported.append(pct), messages.append(msg)))
     install_with(_FakeProc(finish_after=4))
     during = reported[:-1]
     assert during == sorted(during), during

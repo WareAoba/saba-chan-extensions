@@ -25,9 +25,10 @@ import http.client
 import os
 import struct
 import tempfile
-import urllib.request
 import zlib
 from pathlib import Path
+
+from daemon_rcon import ChecksumMismatch, atomic_write, download
 
 VERSION = "4.0-refresh"
 # Microsoft XNA Framework Redistributable 4.0 Refresh
@@ -96,16 +97,6 @@ def _cache_dir() -> Path:
     """Verified files are kept in this extension's data folder so the next server does not download again.
     The daemon gives the data root (``SABA_EXTENSION_DATA_ROOT``, its own per sandboxed run)."""
     return Path(os.environ["SABA_EXTENSION_DATA_ROOT"]) / "xna" / VERSION
-
-
-def _download(url: str, dest: str) -> None:
-    req = urllib.request.Request(url, headers={"User-Agent": "saba-chan"})
-    with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as out:
-        while True:
-            chunk = resp.read(1 << 20)
-            if not chunk:
-                break
-            out.write(chunk)
 
 
 def _msi_cabinet(data: bytes) -> bytes:
@@ -192,7 +183,9 @@ def _fetch(work_dir: Path) -> dict[str, bytes]:
         raise XnaError("write_failed", f"Could not write a temporary file in the server folder: {_reason(e)}") from None
     try:
         try:
-            _download(MSI_URL, msi)
+            download(MSI_URL, msi, checksums={"sha256": MSI_SHA256})
+        except ChecksumMismatch:
+            raise XnaError("checksum_mismatch", "The downloaded XNA installer is not the official file") from None
         except OSError as e:
             raise XnaError("download_failed", f"XNA download failed: {_reason(e)}") from None
         except http.client.HTTPException as e:
@@ -207,25 +200,11 @@ def _fetch(work_dir: Path) -> dict[str, bytes]:
             os.remove(msi)
         except OSError:
             pass
-    if _sha256(data) != MSI_SHA256:
-        raise XnaError("checksum_mismatch", "The downloaded XNA installer is not the official file")
     files = files_from_msi(data)
     for _, name, digest in FILES:
         if _sha256(files[name]) != digest:
             raise XnaError("checksum_mismatch", f"{name} in the XNA installer is not the expected file")
     return files
-
-
-def _write(path: Path, data: bytes) -> None:
-    """Write through a temporary file in the same folder so a half-written DLL is never left"""
-    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(data)
-        os.replace(tmp, path)
-    finally:
-        if os.path.exists(tmp):
-            os.remove(tmp)
 
 
 def install(target_dir) -> list[str]:
@@ -241,13 +220,13 @@ def install(target_dir) -> list[str]:
         try:
             cache.mkdir(parents=True, exist_ok=True)
             for name, data in files.items():
-                _write(cache / name, data)
+                atomic_write(cache / name, data)
         except OSError:
             pass  # the cache only saves a download next time
     try:
         for _, name, digest in FILES:
             if not _matches(target / name, digest):
-                _write(target / name, files[name])
+                atomic_write(target / name, files[name])
     except OSError as e:
         raise XnaError("write_failed", f"Could not write XNA files to the server folder: {_reason(e)}") from None
     return [name for _, name, _ in FILES]

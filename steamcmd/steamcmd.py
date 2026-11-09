@@ -23,7 +23,6 @@ Daemon hook (server.check_update):
 from __future__ import annotations
 
 import io
-import json
 import os
 import platform
 import re
@@ -35,11 +34,11 @@ import tarfile
 import tempfile
 import threading
 import time
-import traceback
-import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any, Optional
+
+from daemon_rcon import download, progress, run_lifecycle
 
 # ── Constants ────────────────────────────────────────────────────
 
@@ -263,11 +262,21 @@ class SteamCMD:
 
         portable.mkdir(parents=True, exist_ok=True)
 
-        started = time.monotonic()
+        # 받은 압축은 portable 옆 임시 파일에 두고 읽은 뒤 지운다 (mkdtemp 폴더는 격리 실행이 쓰지 못한다)
+        fd, archive = tempfile.mkstemp(prefix=".steamcmd-", suffix=".download", dir=portable.parent)
+        os.close(fd)
         try:
-            data = _download_bytes(url, timeout=timeout)
+            started = time.monotonic()
+            try:
+                _download_archive(url, archive, timeout=timeout)
+            finally:
+                self._bootstrap_secs += time.monotonic() - started
+            data = Path(archive).read_bytes()
         finally:
-            self._bootstrap_secs += time.monotonic() - started
+            try:
+                os.remove(archive)
+            except OSError:
+                pass
         _log(f"Downloaded {len(data) / 1_048_576:.1f} MB, extracting …")
         _extract_archive(data, url, portable)
 
@@ -402,7 +411,7 @@ class SteamCMD:
 
             # ── 디스크 사용량 기반 프로그레스 모니터링 (메인 스레드) ──
             # SteamCMD stdout이 버퍼링되어도 디스크 사용량은 실시간으로 변함.
-            _progress(0, "Connecting to Steam...")
+            progress(0, "Connecting to Steam...")
             last_msg = ""
             last_pct = -1
             heartbeat_counter = 0
@@ -453,7 +462,7 @@ class SteamCMD:
 
                 # 메시지 또는 퍼센티지가 변할 때마다 보고 + 10사이클(20초)마다 heartbeat
                 if msg != last_msg or pct != last_pct or heartbeat_counter >= 10:
-                    _progress(pct, msg)
+                    progress(pct, msg)
                     last_msg = msg
                     last_pct = pct
                     heartbeat_counter = 0
@@ -475,7 +484,7 @@ class SteamCMD:
             returncode = proc.returncode
 
             if returncode == 0 or "Success! App" in stdout:
-                _progress(100, "Server files installed successfully")
+                progress(100, "Server files installed successfully")
                 _log(f"SteamCMD install completed for app {app_id}")
 
                 # SteamCMD validate는 파일 검증만 하고 appmanifest의 buildid를
@@ -829,12 +838,6 @@ def _log(msg: str) -> None:
     print(f"[steamcmd] {msg}", file=sys.stderr, flush=True)
 
 
-def _progress(percent: int, message: str) -> None:
-    """Emit a structured progress line on stderr for the Rust daemon to parse."""
-    line = json.dumps({"percent": percent, "message": message}, ensure_ascii=True)
-    print(f"PROGRESS:{line}", file=sys.stderr, flush=True)
-
-
 def _creation_flags() -> int:
     """Return subprocess creation flags (Windows: hide console window)."""
     if _SYSTEM == "Windows":
@@ -906,34 +909,26 @@ def _kill_tree(proc: subprocess.Popen) -> None:
             pass
 
 
-def _download_bytes(url: str, *, timeout: int) -> bytes:
-    """*url* 을 메모리로 내려받는다. 진행률은 0~2% 범위로 보고한다.
+def _download_archive(url: str, dest: str, *, timeout: int) -> None:
+    """*url* 을 *dest* 에 받는다. 진행률은 0~2% 범위로 보고한다.
 
     SteamCMD 자체 다운로드는 전체 프로비저닝의 극히 일부이므로
     install() 진행률과 혼동하지 않도록 범위를 제한한다.
+    읽기 한 번은 _READ_TIMEOUT, 느리게 이어지는 받기도 전체로 *timeout* 안에 끊는다.
     """
-    req = urllib.request.Request(url, headers={"User-Agent": "saba-chan/1.0"})
-    # urlopen의 timeout은 읽기 한 번의 한도라서, 느리게 이어지는 받기도 전체로 timeout 안에 끊는다
     deadline = time.monotonic() + timeout
-    with urllib.request.urlopen(req, timeout=min(timeout, _READ_TIMEOUT)) as resp:
-        total = int(resp.headers.get("Content-Length", 0))
-        chunks: list[bytes] = []
-        downloaded = 0
-        last_pct = -1
-        while True:
-            if time.monotonic() > deadline:
-                raise TimeoutError(f"SteamCMD download did not finish within {timeout}s")
-            chunk = resp.read(64 * 1024)
-            if not chunk:
-                break
-            chunks.append(chunk)
-            downloaded += len(chunk)
-            if total > 0:
-                raw_pct = min(int(downloaded * 100 / total), 100)
-                if raw_pct != last_pct:
-                    _progress(raw_pct * 2 // 100, f"SteamCMD: {downloaded / 1_048_576:.1f}/{total / 1_048_576:.1f} MB")
-                    last_pct = raw_pct
-    return b"".join(chunks)
+    last_pct = [-1]
+
+    def on_progress(downloaded: int, total: int) -> None:
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"SteamCMD download did not finish within {timeout}s")
+        if total > 0:
+            raw_pct = min(int(downloaded * 100 / total), 100)
+            if raw_pct != last_pct[0]:
+                progress(raw_pct * 2 // 100, f"SteamCMD: {downloaded / 1_048_576:.1f}/{total / 1_048_576:.1f} MB")
+                last_pct[0] = raw_pct
+
+    download(url, dest, on_progress=on_progress, timeout=min(timeout, _READ_TIMEOUT), user_agent="saba-chan/1.0")
 
 
 def _safe_member_path(dest: Path, name: str) -> Path:
@@ -1087,32 +1082,5 @@ FUNCTIONS = {
 }
 
 
-def _error_result(message: str) -> dict:
-    return {"success": False, "error": message, "message": message}
-
-
-def _run_cli(functions: dict, argv: list[str], stdin) -> int:
-    """플러그인 프로토콜 실행: ``<script> <function>`` + stdin JSON → stdout JSON 1개.
-
-    데몬은 0이 아닌 종료 코드를 Err로 처리하고 stdout을 버린다. 따라서 실패도
-    ``{"success": false, "error", "message"}`` 로 출력하고 0으로 종료한다.
-    traceback은 stderr로 보낸다 (데몬 debug 로그).
-    """
-    if len(argv) < 2:
-        result = _error_result("No function specified")
-    elif argv[1] not in functions:
-        result = _error_result(f"Unknown function: {argv[1]}")
-    else:
-        try:
-            raw = stdin.read().lstrip("﻿")  # PowerShell BOM 제거
-            config = json.loads(raw) if raw.strip() else {}
-            result = functions[argv[1]](config)
-        except Exception as e:
-            traceback.print_exc(file=sys.stderr)
-            result = _error_result(str(e) or type(e).__name__)
-    print(json.dumps(result, ensure_ascii=False))
-    return 0
-
-
 if __name__ == "__main__":
-    sys.exit(_run_cli(FUNCTIONS, sys.argv, sys.stdin))
+    run_lifecycle(FUNCTIONS)
