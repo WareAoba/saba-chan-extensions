@@ -25,7 +25,7 @@
 | [ue4_ini](ue4_ini/) (`ue4-ini`) | 0.1.8 | 언리얼 엔진 4 INI 파일의 `OptionSettings`를 읽고 써요 | Palworld |
 | [xna](xna/) (`xna`) | 0.1.1 | Microsoft XNA Framework 4.0 Refresh를 PC에 설치하지 않고 게임 서버 옆에 둬요 | Terraria (Windows 서버) |
 
-버전은 각 폴더의 `manifest.json` `version`이 기준이에요. `xna`는 사바 코어(데몬) 0.1.10 이상에서 돌아가요.
+버전은 각 폴더의 `manifest.json` `version`이 기준이에요. `steamcmd`·`xna`는 사바 코어(데몬) 0.1.11 이상에서 돌아가요.
 
 ## 설치하고 쓰기
 

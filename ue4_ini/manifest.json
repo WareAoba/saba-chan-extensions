@@ -17,7 +17,7 @@
   },
   "author": "WareAoba",
   "min_app_version": "0.1.0",
-  "dependencies": [],
+  "dependencies": {},
 
   "instance_fields": {
     "ue4_ini_enabled": { "type": "boolean", "default": false },

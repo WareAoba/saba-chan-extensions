@@ -24,9 +24,29 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      # daemon_rcon.py: 데몬이 넣어 주는 공용 파일. 데몬 저장소에 같은 이름의 브랜치가 있으면 그것을 쓴다
+      - name: Pick the saba-chan branch
+        id: core
+        shell: bash
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          if git ls-remote --exit-code --heads https://github.com/WareAoba/saba-chan "$BRANCH" >/dev/null; then
+            echo "ref=$BRANCH" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          repository: WareAoba/saba-chan
+          ref: ${{ steps.core.outputs.ref }}
+          path: saba-chan
+          sparse-checkout: modules
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: python -m pip install pytest ruff
-      - run: python -m ruff check . --select E9,F63,F7,F82
+      - run: python -m ruff check . --select E9,F63,F7,F82 --exclude saba-chan
       - run: python -m pytest -q
+        env:
+          SABA_RUNTIME_DIR: ${{ github.workspace }}/saba-chan/modules
