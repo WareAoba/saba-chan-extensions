@@ -9,21 +9,22 @@
     "external": "바깥 프로그램"
   },
   "bubble": {
-    "started_by": "{{server}}, 켰어요! ({{who}})",
-    "stopped_by": "{{server}}, 껐어요. ({{who}})",
-    "not_ready": "{{server}} 준비가 안 됐어요…",
-    "crash_restarting": "앗, {{server}} 멈췄어요! {{secs}}초 뒤에 다시 켤게요",
-    "crash": "앗, {{server}} 멈췄어요…",
-    "start_failed": "{{server}} 켜다가 멈췄어요…",
-    "restarted": "{{server}} 다시 켰어요!",
-    "restart_failed": "{{server}} 다시 켜지 못했어요…",
-    "provision_done": "설치 다 됐어요!",
-    "provision_failed": "설치하다가 문제가 생겼어요…",
-    "backup_failed": "{{server}} 백업이 안 됐어요…",
-    "schedule_restart": "{{minutes}}분 뒤에 {{server}} 다시 켤게요",
-    "schedule_stop": "{{minutes}}분 뒤에 {{server}} 끌게요",
-    "schedule_update": "{{minutes}}분 뒤에 {{server}} 업데이트할게요",
-    "schedule_other": "{{minutes}}분 뒤에 {{server}} 예약 작업이 있어요",
-    "update_available": "새 업데이트가 있어요!"
+    "started": "{{server}} 시작 완료",
+    "stopped": "{{server}} 정지 완료",
+    "not_ready": "{{server}} 준비 실패",
+    "restarting": "{{server}} 재시작 중",
+    "crash": "{{server}} 멈춤",
+    "start_failed": "{{server}} 시작 실패",
+    "restarted": "{{server}} 재시작 완료",
+    "restart_failed": "{{server}} 재시작 실패",
+    "installing": "{{server}} 설치 중",
+    "provision_done": "{{server}} 설치 완료",
+    "provision_failed": "{{server}} 설치 실패",
+    "backup_failed": "{{server}} 백업 실패",
+    "schedule_restart": "{{minutes}}분 뒤 {{server}} 재시작",
+    "schedule_stop": "{{minutes}}분 뒤 {{server}} 정지",
+    "schedule_update": "{{minutes}}분 뒤 {{server}} 업데이트",
+    "schedule_other": "{{minutes}}분 뒤 {{server}} 예약 작업",
+    "update_available": "새 업데이트 있음"
   }
 }

@@ -13,33 +13,91 @@
     flex: none;
 }
 
+/* 말풍선: 꼬리 없는 알약. 마친 일은 초록 점, 하는 중·할 일은 깜빡이는 회색 점과 글자 위를 지나가는 빛, 실패는 빨간 점 */
 .saba-pet-bubble {
-    position: relative;
-    max-width: 200px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    max-width: 240px;
     margin-bottom: 6px;
-    padding: 8px 12px;
-    border-radius: 14px;
+    padding: 5px 12px 5px 10px;
+    border-radius: 999px;
     background: var(--bg-1, #1c1e24);
     color: var(--text-1, #f1f2f5);
     border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
-    font-size: 12.5px;
-    line-height: 1.45;
-    text-align: center;
-    word-break: keep-all;
-    overflow-wrap: anywhere;
+    font-size: 12px;
+    line-height: 1.35;
+    white-space: nowrap;
 }
 
-.saba-pet-bubble::after {
-    content: '';
-    position: absolute;
-    left: 50%;
-    bottom: -6px;
-    width: 10px;
-    height: 10px;
-    margin-left: -5px;
-    background: inherit;
-    border-right: inherit;
-    border-bottom: inherit;
-    transform: rotate(45deg);
+.saba-pet-dot {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #9aa0aa;
+}
+
+.saba-pet-bubble[data-state='done'] .saba-pet-dot {
+    background: #3fbf6f;
+    box-shadow: 0 0 0 3px rgba(63, 191, 111, 0.18);
+}
+
+.saba-pet-bubble[data-state='failed'] .saba-pet-dot {
+    background: #e5534b;
+    box-shadow: 0 0 0 3px rgba(229, 83, 75, 0.18);
+}
+
+.saba-pet-bubble[data-state='working'] .saba-pet-dot {
+    animation: saba-pet-blink 1.1s ease-in-out infinite;
+}
+
+.saba-pet-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.saba-pet-bubble[data-state='working'] .saba-pet-text {
+    background: linear-gradient(
+            90deg,
+            var(--text-3, #8b909a) 0%,
+            var(--text-3, #8b909a) 40%,
+            var(--text-1, #f1f2f5) 50%,
+            var(--text-3, #8b909a) 60%,
+            var(--text-3, #8b909a) 100%
+        )
+        0 0 / 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: saba-pet-shimmer 1.8s linear infinite;
+}
+
+.saba-pet-by {
+    flex: none;
+    color: var(--text-3, #8b909a);
+    font-size: 11px;
+}
+
+@keyframes saba-pet-blink {
+    50% {
+        opacity: 0.25;
+    }
+}
+
+@keyframes saba-pet-shimmer {
+    from {
+        background-position: 100% 0;
+    }
+    to {
+        background-position: -150% 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .saba-pet-bubble[data-state='working'] .saba-pet-dot,
+    .saba-pet-bubble[data-state='working'] .saba-pet-text {
+        animation: none;
+    }
 }

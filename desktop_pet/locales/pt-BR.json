@@ -9,21 +9,22 @@
     "external": "outro programa"
   },
   "bubble": {
-    "started_by": "{{server}} ligado! ({{who}})",
-    "stopped_by": "{{server}} desligado. ({{who}})",
-    "not_ready": "{{server}} não ficou pronto…",
-    "crash_restarting": "Ah não, {{server}} parou! Reiniciando em {{secs}} s",
-    "crash": "Ah não, {{server}} parou…",
-    "start_failed": "{{server}} parou ao iniciar…",
-    "restarted": "{{server}} voltou!",
-    "restart_failed": "Não consegui reiniciar {{server}}…",
-    "provision_done": "Instalação concluída!",
-    "provision_failed": "Algo deu errado na instalação…",
-    "backup_failed": "O backup de {{server}} falhou…",
-    "schedule_restart": "Reiniciando {{server}} em {{minutes}} min",
-    "schedule_stop": "Parando {{server}} em {{minutes}} min",
-    "schedule_update": "Atualizando {{server}} em {{minutes}} min",
-    "schedule_other": "Tarefa agendada de {{server}} em {{minutes}} min",
-    "update_available": "Há uma atualização!"
+    "started": "{{server}} iniciado",
+    "stopped": "{{server}} parado",
+    "not_ready": "{{server}} não está pronto",
+    "restarting": "Reiniciando {{server}}",
+    "crash": "{{server}} travou",
+    "start_failed": "{{server}} falhou ao iniciar",
+    "restarted": "{{server}} reiniciado",
+    "restart_failed": "Falha ao reiniciar {{server}}",
+    "installing": "Instalando {{server}}",
+    "provision_done": "{{server}} instalado",
+    "provision_failed": "Falha ao instalar {{server}}",
+    "backup_failed": "Falha no backup de {{server}}",
+    "schedule_restart": "Reinício de {{server}} em {{minutes}} min",
+    "schedule_stop": "Parada de {{server}} em {{minutes}} min",
+    "schedule_update": "Atualização de {{server}} em {{minutes}} min",
+    "schedule_other": "Tarefa de {{server}} em {{minutes}} min",
+    "update_available": "Atualização disponível"
   }
 }

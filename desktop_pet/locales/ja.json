@@ -9,21 +9,22 @@
     "external": "外部プログラム"
   },
   "bubble": {
-    "started_by": "{{server}}、起動したよ！（{{who}}）",
-    "stopped_by": "{{server}}、止めたよ。（{{who}}）",
-    "not_ready": "{{server}}の準備ができなかった…",
-    "crash_restarting": "あっ、{{server}}が止まった！{{secs}}秒後に再起動するね",
-    "crash": "あっ、{{server}}が止まっちゃった…",
-    "start_failed": "{{server}}、起動中に止まっちゃった…",
-    "restarted": "{{server}}、再起動したよ！",
-    "restart_failed": "{{server}}を再起動できなかった…",
-    "provision_done": "インストール完了！",
-    "provision_failed": "インストール中に問題が起きた…",
-    "backup_failed": "{{server}}のバックアップに失敗…",
-    "schedule_restart": "{{minutes}}分後に{{server}}を再起動するね",
-    "schedule_stop": "{{minutes}}分後に{{server}}を止めるね",
-    "schedule_update": "{{minutes}}分後に{{server}}を更新するね",
-    "schedule_other": "{{minutes}}分後に{{server}}の予約タスクがあるよ",
-    "update_available": "アップデートがあるよ！"
+    "started": "{{server}} 起動完了",
+    "stopped": "{{server}} 停止完了",
+    "not_ready": "{{server}} 準備失敗",
+    "restarting": "{{server}} 再起動中",
+    "crash": "{{server}} クラッシュ",
+    "start_failed": "{{server}} 起動失敗",
+    "restarted": "{{server}} 再起動完了",
+    "restart_failed": "{{server}} 再起動失敗",
+    "installing": "{{server}} インストール中",
+    "provision_done": "{{server}} インストール完了",
+    "provision_failed": "{{server}} インストール失敗",
+    "backup_failed": "{{server}} バックアップ失敗",
+    "schedule_restart": "{{minutes}}分後 {{server}} 再起動",
+    "schedule_stop": "{{minutes}}分後 {{server}} 停止",
+    "schedule_update": "{{minutes}}分後 {{server}} アップデート",
+    "schedule_other": "{{minutes}}分後 {{server}} 予約タスク",
+    "update_available": "新しいアップデートあり"
   }
 }

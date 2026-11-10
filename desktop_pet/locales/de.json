@@ -9,21 +9,22 @@
     "external": "einem anderen Programm"
   },
   "bubble": {
-    "started_by": "{{server}} läuft! ({{who}})",
-    "stopped_by": "{{server}} ist aus. ({{who}})",
-    "not_ready": "{{server}} wurde nicht bereit…",
-    "crash_restarting": "Oh nein, {{server}} ist gestoppt! Neustart in {{secs}} s",
-    "crash": "Oh nein, {{server}} ist gestoppt…",
-    "start_failed": "{{server}} stoppte beim Starten…",
-    "restarted": "{{server}} läuft wieder!",
-    "restart_failed": "{{server}} konnte nicht neu starten…",
-    "provision_done": "Installation fertig!",
-    "provision_failed": "Bei der Installation ging etwas schief…",
-    "backup_failed": "Backup von {{server}} fehlgeschlagen…",
+    "started": "{{server}} gestartet",
+    "stopped": "{{server}} gestoppt",
+    "not_ready": "{{server}} nicht bereit",
+    "restarting": "{{server}} wird neu gestartet",
+    "crash": "{{server}} abgestürzt",
+    "start_failed": "{{server}} Start fehlgeschlagen",
+    "restarted": "{{server}} neu gestartet",
+    "restart_failed": "{{server}} Neustart fehlgeschlagen",
+    "installing": "{{server}} wird installiert",
+    "provision_done": "{{server}} installiert",
+    "provision_failed": "{{server}} Installation fehlgeschlagen",
+    "backup_failed": "{{server}} Backup fehlgeschlagen",
     "schedule_restart": "Neustart von {{server}} in {{minutes}} Min.",
-    "schedule_stop": "{{server}} stoppt in {{minutes}} Min.",
+    "schedule_stop": "Stopp von {{server}} in {{minutes}} Min.",
     "schedule_update": "Update von {{server}} in {{minutes}} Min.",
-    "schedule_other": "Geplante Aufgabe für {{server}} in {{minutes}} Min.",
-    "update_available": "Ein Update ist da!"
+    "schedule_other": "Aufgabe für {{server}} in {{minutes}} Min.",
+    "update_available": "Update verfügbar"
   }
 }

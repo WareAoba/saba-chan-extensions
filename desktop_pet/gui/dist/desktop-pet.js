@@ -113,7 +113,7 @@ var module = { exports: {} };
             nextSweep: t0 + SWEEP_AFTER + between(random, SWEEP_GAP),
             nextBlink: t0 + between(random, BLINK_GAP),
             lastHover: -Infinity,
-            bubble: null, // {key, vars, until}
+            bubble: null, // {key, vars, state, until, during}
         };
 
         function any(map) {
@@ -126,8 +126,19 @@ var module = { exports: {} };
             st.once = { scene: scene, at: now() };
         }
 
-        function say(key, vars, long) {
-            st.bubble = { key: key, vars: vars || {}, until: now() + (long ? BUBBLE_LONG_MS : BUBBLE_MS) };
+        /**
+         * 말풍선: 대사가 아니라 할 일·한 일의 짧은 요약. state는 done(마친 일)·working(하는 중·할 일)·failed.
+         * during을 주면 그 장면(수리·요리)이 이어지는 동안 남는다
+         */
+        function say(key, vars, state, during) {
+            var long = state === 'failed';
+            st.bubble = {
+                key: key,
+                vars: vars || {},
+                state: state,
+                until: during ? Infinity : now() + (long ? BUBBLE_LONG_MS : BUBBLE_MS),
+                during: during || null,
+            };
         }
 
         /** 일이 있었다. 자고 있었으면 깬다 */
@@ -143,6 +154,8 @@ var module = { exports: {} };
             for (var id in st.repairing) if (st.repairing[id] <= t) delete st.repairing[id];
             for (var key in st.cooking) if (st.cooking[key] + COOK_STALE <= t) delete st.cooking[key];
             if (st.bubble && st.bubble.until <= t) st.bubble = null;
+            if (st.bubble && st.bubble.during === 'repair' && !any(st.repairing)) st.bubble = null;
+            if (st.bubble && st.bubble.during === 'cooking' && !any(st.cooking)) st.bubble = null;
             if (st.once && now() - st.once.at >= sceneLength(st.once.scene)) st.once = null;
         }
 
@@ -187,19 +200,19 @@ var module = { exports: {} };
                     activity();
                     delete st.collapsed[id];
                     delete st.repairing[id];
-                    if (remote) say('bubble.started_by', { server: name, who: who });
+                    if (remote) say('bubble.started', { server: name, who: who }, 'done');
                     play('think');
                     break;
                 case 'instance.ready':
                     activity();
                     play(data.ok === false ? 'scratch' : 'wave');
-                    if (data.ok === false) say('bubble.not_ready', { server: name });
+                    if (data.ok === false) say('bubble.not_ready', { server: name }, 'failed');
                     break;
                 case 'instance.stopped':
                     activity();
                     delete st.collapsed[id];
                     delete st.repairing[id];
-                    if (remote) say('bubble.stopped_by', { server: name, who: who });
+                    if (remote) say('bubble.stopped', { server: name, who: who }, 'done');
                     play('clasp');
                     break;
                 case 'instance.exit':
@@ -208,16 +221,16 @@ var module = { exports: {} };
                     st.once = null;
                     if (typeof data.restartInSecs === 'number') {
                         st.repairing[id] = now() + data.restartInSecs * 1000 + REPAIR_GRACE;
-                        say('bubble.crash_restarting', { server: name, secs: data.restartInSecs }, true);
+                        say('bubble.restarting', { server: name }, 'working', 'repair');
                     } else {
                         st.collapsed[id] = true;
-                        say(data.kind === 'start_failed' ? 'bubble.start_failed' : 'bubble.crash', { server: name }, true);
+                        say(data.kind === 'start_failed' ? 'bubble.start_failed' : 'bubble.crash', { server: name }, 'failed');
                     }
                     break;
                 case 'instance.restarted':
                     activity();
                     delete st.repairing[id];
-                    say('bubble.restarted', { server: name });
+                    say('bubble.restarted', { server: name }, 'done');
                     play('wave', true);
                     break;
                 case 'instance.restart_failed':
@@ -225,7 +238,7 @@ var module = { exports: {} };
                     delete st.repairing[id];
                     st.collapsed[id] = true;
                     st.once = null;
-                    say('bubble.restart_failed', { server: name }, true);
+                    say('bubble.restart_failed', { server: name }, 'failed');
                     break;
                 case 'instance.restart_cancelled':
                     delete st.repairing[id];
@@ -238,21 +251,22 @@ var module = { exports: {} };
                         var wasCooking = Object.prototype.hasOwnProperty.call(st.cooking, key);
                         delete st.cooking[key];
                         if (data.error) {
-                            say('bubble.provision_failed', {}, true);
+                            say('bubble.provision_failed', { server: key }, 'failed');
                             play('scratch', true);
                         } else if (wasCooking) {
-                            say('bubble.provision_done', {});
+                            say('bubble.provision_done', { server: key }, 'done');
                             play('served', true);
                         }
                     } else {
                         st.cooking[key] = now();
+                        say('bubble.installing', { server: key }, 'working', 'cooking');
                     }
                     break;
                 }
                 case 'backup.done':
                     if (data.ok === false) {
                         activity();
-                        say('bubble.backup_failed', { server: name });
+                        say('bubble.backup_failed', { server: name }, 'failed');
                         play('scratch');
                     }
                     break;
@@ -261,11 +275,11 @@ var module = { exports: {} };
                     say('bubble.schedule_' + (['restart', 'stop', 'update'].indexOf(data.action) >= 0 ? data.action : 'other'), {
                         server: name,
                         minutes: data.minutesLeft,
-                    });
+                    }, 'working');
                     play('think');
                     break;
                 case 'update.available':
-                    say('bubble.update_available', {});
+                    say('bubble.update_available', {}, 'done');
                     play('clasp');
                     break;
                 default:
@@ -300,8 +314,9 @@ var module = { exports: {} };
         /** 지금 그릴 것: 장면 이름, 그 장면이 시작한 시각, 말풍선 */
         function view() {
             expire();
-            if (st.once) return { scene: st.once.scene, at: st.once.at, bubble: st.bubble };
-            return { scene: st.base, at: st.baseAt, bubble: st.bubble };
+            var b = st.bubble && { key: st.bubble.key, vars: st.bubble.vars, state: st.bubble.state };
+            if (st.once) return { scene: st.once.scene, at: st.once.at, bubble: b };
+            return { scene: st.base, at: st.baseAt, bubble: b };
         }
 
         tick();
@@ -338,13 +353,19 @@ var SCALE = 2 / 3;
 /** 칸이 바뀌지 않아도 이만큼에 한 번은 상태 기계를 돌린다 (시간으로 바뀌는 잠·빗자루질·말풍선) */
 var TICK_MS = 250;
 
-/** 말풍선 변수: 시킨 쪽은 사용자 이름, 없으면 출처 이름 */
-function bubbleText(t, bubble) {
-    var vars = {};
-    for (var k in bubble.vars) vars[k] = bubble.vars[k];
+/** 말풍선: 할 일·한 일의 짧은 요약과, 밖에서 시켰으면 시킨 쪽(사용자 이름, 없으면 출처 이름) */
+function Bubble(props) {
+    var t = props.t;
+    var bubble = props.bubble;
     var who = bubble.vars.who;
-    if (who) vars.who = who.user || t('source.' + (who.source || 'external'), { defaultValue: who.source || '' });
-    return t(bubble.key, vars);
+    var by = who ? who.user || t('source.' + (who.source || 'external'), { defaultValue: who.source || '' }) : '';
+    return h(
+        'div',
+        { className: 'saba-pet-bubble', 'data-state': bubble.state, role: 'status' },
+        h('span', { className: 'saba-pet-dot', 'aria-hidden': true }),
+        h('span', { className: 'saba-pet-text' }, t(bubble.key, bubble.vars)),
+        by ? h('span', { className: 'saba-pet-by' }, by) : null,
+    );
 }
 
 function Sprite(props) {
@@ -420,7 +441,7 @@ function Pet(props) {
                 setNow(Date.now());
             },
         },
-        view.bubble ? h('div', { className: 'saba-pet-bubble', role: 'status' }, bubbleText(t, view.bubble)) : null,
+        view.bubble ? h(Bubble, { t: t, bubble: view.bubble }) : null,
         h(Sprite, { scene: view.scene, frame: frame }),
     );
 }

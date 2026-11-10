@@ -9,21 +9,22 @@
     "external": "otro programa"
   },
   "bubble": {
-    "started_by": "¡{{server}} encendido! ({{who}})",
-    "stopped_by": "{{server}} apagado. ({{who}})",
-    "not_ready": "{{server}} no llegó a estar listo…",
-    "crash_restarting": "¡Ay, {{server}} se detuvo! Reinicio en {{secs}} s",
-    "crash": "Ay, {{server}} se detuvo…",
-    "start_failed": "{{server}} se detuvo al iniciar…",
-    "restarted": "¡{{server}} volvió a funcionar!",
-    "restart_failed": "No se pudo reiniciar {{server}}…",
-    "provision_done": "¡Instalación terminada!",
-    "provision_failed": "Algo salió mal al instalar…",
-    "backup_failed": "Falló la copia de seguridad de {{server}}…",
+    "started": "{{server}} iniciado",
+    "stopped": "{{server}} detenido",
+    "not_ready": "{{server}} no está listo",
+    "restarting": "Reiniciando {{server}}",
+    "crash": "{{server}} se cerró",
+    "start_failed": "{{server}} no pudo iniciar",
+    "restarted": "{{server}} reiniciado",
+    "restart_failed": "Fallo al reiniciar {{server}}",
+    "installing": "Instalando {{server}}",
+    "provision_done": "{{server}} instalado",
+    "provision_failed": "Fallo al instalar {{server}}",
+    "backup_failed": "Fallo en la copia de {{server}}",
     "schedule_restart": "Reinicio de {{server}} en {{minutes}} min",
-    "schedule_stop": "{{server}} se detiene en {{minutes}} min",
+    "schedule_stop": "Parada de {{server}} en {{minutes}} min",
     "schedule_update": "Actualización de {{server}} en {{minutes}} min",
-    "schedule_other": "Tarea programada de {{server}} en {{minutes}} min",
-    "update_available": "¡Hay una actualización!"
+    "schedule_other": "Tarea de {{server}} en {{minutes}} min",
+    "update_available": "Actualización disponible"
   }
 }

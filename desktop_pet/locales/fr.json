@@ -9,21 +9,22 @@
     "external": "un autre programme"
   },
   "bubble": {
-    "started_by": "{{server}} est lancé ! ({{who}})",
-    "stopped_by": "{{server}} est arrêté. ({{who}})",
-    "not_ready": "{{server}} n'a pas été prêt…",
-    "crash_restarting": "Oh non, {{server}} s'est arrêté ! Redémarrage dans {{secs}} s",
-    "crash": "Oh non, {{server}} s'est arrêté…",
-    "start_failed": "{{server}} s'est arrêté au démarrage…",
-    "restarted": "{{server}} est reparti !",
-    "restart_failed": "Impossible de redémarrer {{server}}…",
-    "provision_done": "Installation terminée !",
-    "provision_failed": "Un problème est survenu pendant l'installation…",
-    "backup_failed": "La sauvegarde de {{server}} a échoué…",
+    "started": "{{server}} démarré",
+    "stopped": "{{server}} arrêté",
+    "not_ready": "{{server}} pas prêt",
+    "restarting": "Redémarrage de {{server}}",
+    "crash": "{{server}} a planté",
+    "start_failed": "Échec du démarrage de {{server}}",
+    "restarted": "{{server}} redémarré",
+    "restart_failed": "Échec du redémarrage de {{server}}",
+    "installing": "Installation de {{server}}",
+    "provision_done": "{{server}} installé",
+    "provision_failed": "Échec de l'installation de {{server}}",
+    "backup_failed": "Échec de la sauvegarde de {{server}}",
     "schedule_restart": "Redémarrage de {{server}} dans {{minutes}} min",
     "schedule_stop": "Arrêt de {{server}} dans {{minutes}} min",
     "schedule_update": "Mise à jour de {{server}} dans {{minutes}} min",
-    "schedule_other": "Tâche planifiée pour {{server}} dans {{minutes}} min",
-    "update_available": "Une mise à jour est disponible !"
+    "schedule_other": "Tâche de {{server}} dans {{minutes}} min",
+    "update_available": "Mise à jour disponible"
   }
 }

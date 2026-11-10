@@ -9,21 +9,22 @@
     "external": "another program"
   },
   "bubble": {
-    "started_by": "{{server}} is on! ({{who}})",
-    "stopped_by": "{{server}} is off. ({{who}})",
-    "not_ready": "{{server}} didn't get ready…",
-    "crash_restarting": "Oh no, {{server}} stopped! Restarting in {{secs}}s",
-    "crash": "Oh no, {{server}} stopped…",
-    "start_failed": "{{server}} stopped while starting…",
-    "restarted": "{{server}} is back up!",
-    "restart_failed": "Couldn't restart {{server}}…",
-    "provision_done": "Install finished!",
-    "provision_failed": "Something went wrong while installing…",
-    "backup_failed": "Backup of {{server}} failed…",
-    "schedule_restart": "Restarting {{server}} in {{minutes}} min",
-    "schedule_stop": "Stopping {{server}} in {{minutes}} min",
-    "schedule_update": "Updating {{server}} in {{minutes}} min",
-    "schedule_other": "Scheduled task for {{server}} in {{minutes}} min",
-    "update_available": "An update is available!"
+    "started": "{{server}} started",
+    "stopped": "{{server}} stopped",
+    "not_ready": "{{server}} not ready",
+    "restarting": "Restarting {{server}}",
+    "crash": "{{server}} crashed",
+    "start_failed": "{{server}} failed to start",
+    "restarted": "{{server}} restarted",
+    "restart_failed": "{{server}} restart failed",
+    "installing": "Installing {{server}}",
+    "provision_done": "{{server}} installed",
+    "provision_failed": "{{server}} install failed",
+    "backup_failed": "{{server}} backup failed",
+    "schedule_restart": "Restart {{server}} in {{minutes}} min",
+    "schedule_stop": "Stop {{server}} in {{minutes}} min",
+    "schedule_update": "Update {{server}} in {{minutes}} min",
+    "schedule_other": "{{server}} task in {{minutes}} min",
+    "update_available": "Update available"
   }
 }
