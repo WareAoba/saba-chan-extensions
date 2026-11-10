@@ -62,16 +62,16 @@
     background: linear-gradient(
             90deg,
             var(--text-3, #8b909a) 0%,
-            var(--text-3, #8b909a) 40%,
+            var(--text-3, #8b909a) 30%,
             var(--text-1, #f1f2f5) 50%,
-            var(--text-3, #8b909a) 60%,
+            var(--text-3, #8b909a) 70%,
             var(--text-3, #8b909a) 100%
         )
-        0 0 / 250% 100%;
+        0 0 / 300% 100%;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    animation: saba-pet-shimmer 1.8s linear infinite;
+    animation: saba-pet-shimmer 3.2s ease-in-out infinite;
 }
 
 .saba-pet-by {
@@ -91,7 +91,7 @@
         background-position: 100% 0;
     }
     to {
-        background-position: -150% 0;
+        background-position: 0% 0;
     }
 }
 
