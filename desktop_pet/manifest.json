@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "id": "desktop-pet",
+  "name": "Desktop Pet",
+  "version": "0.1.0",
+  "description": "Puts a small Saba-chan in a corner of your desktop who reacts to your servers",
+  "descriptions": {
+    "ko": "바탕화면 구석에 서버 일에 반응하는 작은 사바쨩을 띄웁니다",
+    "ja": "サーバーの出来事に反応する小さなサバちゃんをデスクトップの隅に出します",
+    "zh-CN": "在桌面角落放一个会对服务器动态做出反应的小 Saba-chan",
+    "zh-TW": "在桌面角落放一個會對伺服器動態做出反應的小 Saba-chan",
+    "es": "Pone una pequeña Saba-chan en una esquina del escritorio que reacciona a tus servidores",
+    "pt-BR": "Coloca uma pequena Saba-chan num canto da área de trabalho que reage aos seus servidores",
+    "ru": "Сажает маленькую Saba-chan в угол рабочего стола, которая реагирует на ваши серверы",
+    "de": "Setzt eine kleine Saba-chan in eine Desktop-Ecke, die auf deine Server reagiert",
+    "fr": "Place une petite Saba-chan dans un coin du bureau qui réagit à vos serveurs"
+  },
+  "author": "WareAoba",
+  "min_app_version": "0.1.13",
+  "dependencies": {},
+  "permissions": {},
+  "gui": {
+    "bundle": "gui/dist/desktop-pet.js",
+    "styles": "gui/pet.css",
+    "slots": {
+      "Desktop.overlay": {}
+    }
+  },
+  "i18n_dir": "locales"
+}

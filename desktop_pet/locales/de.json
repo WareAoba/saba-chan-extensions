@@ -1,0 +1,29 @@
+{
+  "source": {
+    "discord": "Discord",
+    "web": "Saba-chan Web",
+    "remote": "einem Remote-PC",
+    "mcp": "einem KI-Agenten",
+    "chatbot": "Sprechende Saba-chan",
+    "schedule": "einem Zeitplan",
+    "external": "einem anderen Programm"
+  },
+  "bubble": {
+    "started_by": "{{server}} läuft! ({{who}})",
+    "stopped_by": "{{server}} ist aus. ({{who}})",
+    "not_ready": "{{server}} wurde nicht bereit…",
+    "crash_restarting": "Oh nein, {{server}} ist gestoppt! Neustart in {{secs}} s",
+    "crash": "Oh nein, {{server}} ist gestoppt…",
+    "start_failed": "{{server}} stoppte beim Starten…",
+    "restarted": "{{server}} läuft wieder!",
+    "restart_failed": "{{server}} konnte nicht neu starten…",
+    "provision_done": "Installation fertig!",
+    "provision_failed": "Bei der Installation ging etwas schief…",
+    "backup_failed": "Backup von {{server}} fehlgeschlagen…",
+    "schedule_restart": "Neustart von {{server}} in {{minutes}} Min.",
+    "schedule_stop": "{{server}} stoppt in {{minutes}} Min.",
+    "schedule_update": "Update von {{server}} in {{minutes}} Min.",
+    "schedule_other": "Geplante Aufgabe für {{server}} in {{minutes}} Min.",
+    "update_available": "Ein Update ist da!"
+  }
+}

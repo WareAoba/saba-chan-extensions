@@ -1,0 +1,29 @@
+{
+  "source": {
+    "discord": "Discord",
+    "web": "Saba-chan 網頁",
+    "remote": "遠端電腦",
+    "mcp": "AI 代理",
+    "chatbot": "會說話的 Saba-chan",
+    "schedule": "排程工作",
+    "external": "外部程式"
+  },
+  "bubble": {
+    "started_by": "{{server}} 已啟動！（{{who}}）",
+    "stopped_by": "{{server}} 已停止。（{{who}}）",
+    "not_ready": "{{server}} 沒能準備好…",
+    "crash_restarting": "糟了，{{server}} 停了！{{secs}} 秒後重新啟動",
+    "crash": "糟了，{{server}} 停了…",
+    "start_failed": "{{server}} 啟動時停了…",
+    "restarted": "{{server}} 已重新啟動！",
+    "restart_failed": "{{server}} 重新啟動失敗…",
+    "provision_done": "安裝完成！",
+    "provision_failed": "安裝時出了問題…",
+    "backup_failed": "{{server}} 備份失敗…",
+    "schedule_restart": "{{minutes}} 分鐘後重新啟動 {{server}}",
+    "schedule_stop": "{{minutes}} 分鐘後停止 {{server}}",
+    "schedule_update": "{{minutes}} 分鐘後更新 {{server}}",
+    "schedule_other": "{{minutes}} 分鐘後 {{server}} 有排程工作",
+    "update_available": "有新的更新！"
+  }
+}

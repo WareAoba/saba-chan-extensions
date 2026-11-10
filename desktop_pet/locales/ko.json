@@ -1,0 +1,29 @@
+{
+  "source": {
+    "discord": "디스코드",
+    "web": "사바쨩 웹",
+    "remote": "원격 PC",
+    "mcp": "AI 에이전트",
+    "chatbot": "말하는 사바쨩",
+    "schedule": "예약 작업",
+    "external": "바깥 프로그램"
+  },
+  "bubble": {
+    "started_by": "{{server}}, 켰어요! ({{who}})",
+    "stopped_by": "{{server}}, 껐어요. ({{who}})",
+    "not_ready": "{{server}} 준비가 안 됐어요…",
+    "crash_restarting": "앗, {{server}} 멈췄어요! {{secs}}초 뒤에 다시 켤게요",
+    "crash": "앗, {{server}} 멈췄어요…",
+    "start_failed": "{{server}} 켜다가 멈췄어요…",
+    "restarted": "{{server}} 다시 켰어요!",
+    "restart_failed": "{{server}} 다시 켜지 못했어요…",
+    "provision_done": "설치 다 됐어요!",
+    "provision_failed": "설치하다가 문제가 생겼어요…",
+    "backup_failed": "{{server}} 백업이 안 됐어요…",
+    "schedule_restart": "{{minutes}}분 뒤에 {{server}} 다시 켤게요",
+    "schedule_stop": "{{minutes}}분 뒤에 {{server}} 끌게요",
+    "schedule_update": "{{minutes}}분 뒤에 {{server}} 업데이트할게요",
+    "schedule_other": "{{minutes}}분 뒤에 {{server}} 예약 작업이 있어요",
+    "update_available": "새 업데이트가 있어요!"
+  }
+}

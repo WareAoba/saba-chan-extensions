@@ -1,0 +1,29 @@
+{
+  "source": {
+    "discord": "Discord",
+    "web": "Saba-chan Web",
+    "remote": "um PC remoto",
+    "mcp": "um agente de IA",
+    "chatbot": "Saba-chan falante",
+    "schedule": "uma tarefa agendada",
+    "external": "outro programa"
+  },
+  "bubble": {
+    "started_by": "{{server}} ligado! ({{who}})",
+    "stopped_by": "{{server}} desligado. ({{who}})",
+    "not_ready": "{{server}} não ficou pronto…",
+    "crash_restarting": "Ah não, {{server}} parou! Reiniciando em {{secs}} s",
+    "crash": "Ah não, {{server}} parou…",
+    "start_failed": "{{server}} parou ao iniciar…",
+    "restarted": "{{server}} voltou!",
+    "restart_failed": "Não consegui reiniciar {{server}}…",
+    "provision_done": "Instalação concluída!",
+    "provision_failed": "Algo deu errado na instalação…",
+    "backup_failed": "O backup de {{server}} falhou…",
+    "schedule_restart": "Reiniciando {{server}} em {{minutes}} min",
+    "schedule_stop": "Parando {{server}} em {{minutes}} min",
+    "schedule_update": "Atualizando {{server}} em {{minutes}} min",
+    "schedule_other": "Tarefa agendada de {{server}} em {{minutes}} min",
+    "update_available": "Há uma atualização!"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "source": {
+    "discord": "Discord",
+    "web": "Saba-chan Web",
+    "remote": "удалённый ПК",
+    "mcp": "ИИ-агент",
+    "chatbot": "Говорящая Saba-chan",
+    "schedule": "расписание",
+    "external": "другая программа"
+  },
+  "bubble": {
+    "started_by": "{{server}} запущен! ({{who}})",
+    "stopped_by": "{{server}} остановлен. ({{who}})",
+    "not_ready": "{{server}} не стал готов…",
+    "crash_restarting": "Ой, {{server}} остановился! Перезапуск через {{secs}} с",
+    "crash": "Ой, {{server}} остановился…",
+    "start_failed": "{{server}} остановился при запуске…",
+    "restarted": "{{server}} снова работает!",
+    "restart_failed": "Не удалось перезапустить {{server}}…",
+    "provision_done": "Установка завершена!",
+    "provision_failed": "Во время установки что-то пошло не так…",
+    "backup_failed": "Резервная копия {{server}} не удалась…",
+    "schedule_restart": "Перезапуск {{server}} через {{minutes}} мин",
+    "schedule_stop": "Остановка {{server}} через {{minutes}} мин",
+    "schedule_update": "Обновление {{server}} через {{minutes}} мин",
+    "schedule_other": "Задание по расписанию для {{server}} через {{minutes}} мин",
+    "update_available": "Есть обновление!"
+  }
+}

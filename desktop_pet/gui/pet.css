@@ -1,0 +1,45 @@
+/* 데스크톱 펫 (gui/src/pet.js). 창은 투명하고 펫과 말풍선만 보인다. 색은 앱 테마 변수를 따른다 */
+
+.saba-pet {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 8px 0;
+}
+
+.saba-pet-sprite {
+    background-repeat: no-repeat;
+    image-rendering: auto;
+    flex: none;
+}
+
+.saba-pet-bubble {
+    position: relative;
+    max-width: 200px;
+    margin-bottom: 6px;
+    padding: 8px 12px;
+    border-radius: 14px;
+    background: var(--bg-1, #1c1e24);
+    color: var(--text-1, #f1f2f5);
+    border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+    font-size: 12.5px;
+    line-height: 1.45;
+    text-align: center;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+}
+
+.saba-pet-bubble::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    background: inherit;
+    border-right: inherit;
+    border-bottom: inherit;
+    transform: rotate(45deg);
+}

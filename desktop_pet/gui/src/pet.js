@@ -1,0 +1,107 @@
+/*
+ * 데스크톱 펫 화면 (slot `Desktop.overlay`). build.py가 machine.js(M)·스프라이트(SPRITES)와 한 파일로 묶는다.
+ * React는 앱이 건넨 window.React(19)를 쓴다. 창 일(누르면 앱 열기·끌기·우클릭 메뉴)은 앱의 오버레이 창이 맡는다.
+ */
+/* global M, SPRITES */
+var React = window.React;
+var h = React.createElement;
+
+/** 그리는 크기: 원본 칸(192×208)의 2/3. 화면 배율 150%에서 원본 그대로 찍힌다 */
+var CELL_W = 192;
+var CELL_H = 208;
+var SCALE = 2 / 3;
+/** 칸이 바뀌지 않아도 이만큼에 한 번은 상태 기계를 돌린다 (시간으로 바뀌는 잠·빗자루질·말풍선) */
+var TICK_MS = 250;
+
+/** 말풍선 변수: 시킨 쪽은 사용자 이름, 없으면 출처 이름 */
+function bubbleText(t, bubble) {
+    var vars = {};
+    for (var k in bubble.vars) vars[k] = bubble.vars[k];
+    var who = bubble.vars.who;
+    if (who) vars.who = who.user || t('source.' + (who.source || 'external'), { defaultValue: who.source || '' });
+    return t(bubble.key, vars);
+}
+
+function Sprite(props) {
+    var sheet = SPRITES[props.scene];
+    if (!sheet || props.frame < 0) return null;
+    var w = CELL_W * SCALE;
+    var hgt = CELL_H * SCALE;
+    return h('div', {
+        className: 'saba-pet-sprite',
+        'data-scene': props.scene,
+        style: {
+            width: w + 'px',
+            height: hgt + 'px',
+            backgroundImage: 'url(' + sheet.url + ')',
+            backgroundSize: sheet.frames * w + 'px ' + hgt + 'px',
+            backgroundPosition: -props.frame * w + 'px 0',
+        },
+    });
+}
+
+function Pet(props) {
+    var host = props.host;
+    var t = host.t;
+    var machineRef = React.useRef(null);
+    if (!machineRef.current) machineRef.current = M.createMachine();
+    var machine = machineRef.current;
+    var _a = React.useState(0);
+    var setNow = _a[1];
+
+    var view = machine.view();
+    var elapsed = Date.now() - view.at;
+    var frame = M.frameAt(view.scene, elapsed);
+    // 다음 칸이 바뀌는 때에 맞춰 다시 그린다 (늘 떠 있는 창이라 매 화면 그리기 대신)
+    // 한 번 도는 장면이 끝났으면 곧바로 다음 장면을 고른다
+    var delay = frame < 0 ? 16 : Math.max(16, Math.min(TICK_MS, M.nextFrameIn(view.scene, elapsed)));
+    React.useEffect(function () {
+        var timer = setTimeout(function () {
+            machine.tick();
+            setNow(Date.now());
+        }, delay);
+        return function () {
+            clearTimeout(timer);
+        };
+    });
+
+    // 데몬 이벤트
+    React.useEffect(
+        function () {
+            return host.on('*', function (data, type) {
+                machine.event(type, data);
+                setNow(Date.now());
+            });
+        },
+        [host, machine],
+    );
+
+    // 한 번 도는 장면이 막 끝났으면 다음 장면을 고르기 전까지 그 마지막 칸을 둔다
+    if (frame < 0) {
+        var s = M.SCENES[view.scene];
+        frame = s.intro[s.intro.length - 1];
+    }
+
+    return h(
+        'div',
+        {
+            className: 'saba-pet',
+            onMouseEnter: function () {
+                machine.hover();
+                setNow(Date.now());
+            },
+            onClick: function () {
+                machine.click();
+                setNow(Date.now());
+            },
+        },
+        view.bubble ? h('div', { className: 'saba-pet-bubble', role: 'status' }, bubbleText(t, view.bubble)) : null,
+        h(Sprite, { scene: view.scene, frame: frame }),
+    );
+}
+
+window.SabaExtDesktopPet = {
+    registerSlots: function () {
+        return { 'Desktop.overlay': Pet };
+    },
+};
