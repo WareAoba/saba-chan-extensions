@@ -14,22 +14,19 @@
 }
 
 /* 말풍선: 꼬리 없는 알약. 마친 일은 초록 점, 하는 중·할 일은 깜빡이는 회색 점과 글자 위를 지나가는 빛, 실패는 빨간 점.
-   여러 작업이면 겹쳐 쌓고(끝난 일이 위), 자리가 바뀌면 미끄러져 옮긴다. 높이 26px, 한 칸 19px (pet.js) */
+   여러 작업이면 맨 앞(끝난 일 먼저)만 글자를 보이고 뒤 말풍선은 아래로 조금씩 삐져나오게 겹친다.
+   자리가 바뀌면 미끄러져 옮긴다. 높이 26px, 6px씩, 6%씩 작게 (pet.js) */
 .saba-pet-bubbles {
     position: relative;
-    width: 240px;
+    width: fit-content;
+    max-width: 240px;
     margin-bottom: 6px;
 }
 
 .saba-pet-bubble {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    width: fit-content;
-    max-width: 100%;
+    position: relative;
+    max-width: 240px;
     height: 26px;
-    margin: 0 auto;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -43,8 +40,25 @@
     font-size: 12px;
     line-height: 1;
     white-space: nowrap;
+    transform-origin: 50% 100%;
     transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
     animation: saba-pet-pop 0.3s ease-out;
+}
+
+.saba-pet-bubble > * {
+    transition: opacity 0.3s ease;
+}
+
+/* 뒤 말풍선은 맨 앞 말풍선 너비에 맞춘다 */
+.saba-pet-bubble[data-behind] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+}
+
+.saba-pet-bubble[data-behind] > * {
+    opacity: 0;
 }
 
 .saba-pet-dot {

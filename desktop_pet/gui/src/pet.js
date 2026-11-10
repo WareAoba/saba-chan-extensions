@@ -10,9 +10,10 @@ var h = React.createElement;
 var CELL_W = 192;
 var CELL_H = 208;
 var SCALE = 2 / 3;
-/** 말풍선 높이와, 여러 개를 겹쳐 쌓을 때 한 칸씩 내려가는 거리 (pet.css와 맞춘다) */
+/** 말풍선 높이와, 여러 개를 겹쳐 쌓을 때 뒤 말풍선이 삐져나오는 거리·줄어드는 비율 (pet.css와 맞춘다) */
 var BUBBLE_H = 26;
-var BUBBLE_STEP = 19;
+var BUBBLE_STEP = 6;
+var BUBBLE_SHRINK = 0.06;
 /** 칸이 바뀌지 않아도 이만큼에 한 번은 상태 기계를 돌린다 (시간으로 바뀌는 잠·빗자루질·말풍선) */
 var TICK_MS = 250;
 
@@ -27,7 +28,12 @@ function Bubble(props) {
         {
             className: 'saba-pet-bubble',
             'data-state': bubble.state,
-            style: { transform: 'translateY(' + props.index * BUBBLE_STEP + 'px)', zIndex: props.count - props.index },
+            'data-behind': props.index > 0 ? 'true' : undefined,
+            'aria-hidden': props.index > 0 ? true : undefined,
+            style: {
+                transform: 'translateY(' + props.index * BUBBLE_STEP + 'px) scale(' + (1 - props.index * BUBBLE_SHRINK) + ')',
+                zIndex: props.count - props.index,
+            },
         },
         h('span', { className: 'saba-pet-dot', 'aria-hidden': true }),
         h('span', { className: 'saba-pet-text' }, t(bubble.key, bubble.vars)),
