@@ -16,7 +16,7 @@ var module = { exports: {} };
     var SWEEP_AFTER = 10 * MIN; // 이만큼 아무 일이 없으면 가끔 빗자루질
     var SLEEP_AFTER = 3 * 60 * MIN; // 이만큼 아무 일이 없으면 잠
     var SWEEP_GAP = [90 * 1000, 240 * 1000]; // 빗자루질 사이 간격 (무작위)
-    var BLINK_GAP = [6 * 1000, 14 * 1000]; // 평상시 눈 깜빡임 간격 (무작위)
+    var BLINK_GAP = [15 * 1000, 40 * 1000]; // 평상시 눈 깜빡임 간격 (무작위)
     var HOVER_GAP = 3 * 1000; // 점프는 이만큼에 한 번
     var REPAIR_GRACE = 3 * MIN; // 다시 켜기 대기 + 이만큼이 지나도 결과가 없으면 고치기를 그만둔다
     var COOK_STALE = 30 * MIN; // 설치 진행이 이만큼 끊기면 요리를 그만둔다
@@ -48,7 +48,8 @@ var module = { exports: {} };
      * once 장면은 intro만 돌고 끝난다(그 뒤 기본 장면으로). 수리·빗자루질만 빠르게, 나머지는 느리게 (사용자 11-11)
      */
     var SCENES = {
-        idle: { frames: 6, intro: [], loop: pp(0, 5), ms: 400 },
+        // 대기 줄의 2~4번 칸은 눈을 감는다: 대기는 뜬 눈 칸(0·1)만 천천히 오가고, 깜빡임은 가끔 blink로
+        idle: { frames: 6, intro: [], loop: [0, 0, 0, 0, 1, 1, 1, 1], ms: 400 },
         blink: { frames: 8, intro: range(0, 7), loop: null, ms: 110 },
         jump: { frames: 5, intro: range(0, 4), loop: null, ms: 120 },
         wave: { frames: 4, intro: repeat(pp(0, 3), 2), loop: null, ms: 200 },
@@ -359,6 +360,7 @@ var module = { exports: {} };
         createMachine: createMachine,
         SWEEP_AFTER: SWEEP_AFTER,
         SLEEP_AFTER: SLEEP_AFTER,
+        BLINK_GAP: BLINK_GAP,
     };
     if (typeof module === 'object' && module.exports) module.exports = api;
     else root.SabaPetMachine = api;
