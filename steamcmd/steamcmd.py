@@ -660,14 +660,23 @@ class SteamCMD:
         local = get_local_buildid(str(install_dir), app_id)
         local_branch = get_local_branch(str(install_dir), app_id)
         remote: Optional[str] = None
+        # 원격을 모르면 "업데이트 없음"이 아니라 확인 실패다 (화면이 둘을 구분해 보인다)
+        failure: Optional[str] = None
 
         if self.available:
             try:
                 raw = self._app_info_print(app_id)
                 if raw:
                     remote = parse_remote_buildid(raw, branch=branch)
+                    if remote is None:
+                        failure = f"SteamCMD did not report a buildid for branch '{branch}'"
+                else:
+                    failure = "SteamCMD app_info_print returned no output"
             except Exception as e:
                 _log(f"Failed to query remote buildid for app {app_id}: {e}")
+                failure = f"SteamCMD app_info_print failed: {e}"
+        else:
+            failure = "SteamCMD is not available"
 
         update_available = False
         if local and remote and local_branch is not None and local_branch != branch:
@@ -685,13 +694,18 @@ class SteamCMD:
             # No local manifest — consider as needing update (fresh install)
             update_available = True
 
-        return {
+        result: dict[str, Any] = {
             "update_available": update_available,
             "local_branch": local_branch,
             "local_buildid": local,
             "remote_buildid": remote,
             "app_id": app_id,
         }
+        if failure:
+            _log(f"Update check failed for app {app_id}: {failure}")
+            result["reason"] = "check_failed"
+            result["error"] = failure
+        return result
 
     def _app_info_print(self, app_id: int) -> Optional[str]:
         """Run ``steamcmd +app_info_update 1 +app_info_print <appid> +quit``.
@@ -1115,6 +1129,7 @@ def _plugin_check_update(config: dict) -> dict:
             "local_buildid": None,
             "remote_buildid": None,
             "app_id": None,
+            "reason": "check_failed",
             "error": "app_id is required",
         }
 

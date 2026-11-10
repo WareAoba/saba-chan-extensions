@@ -1069,3 +1069,37 @@ def test_extract_refuses_existing_link_in_dest(tmp_path):
     with pytest.raises(ValueError):
         steamcmd_mod._extract_archive(_zip_bytes({"sub/file.txt": b"x"}), "x.zip", dest)
     assert (outside / "file.txt").read_text() == "keep"
+
+
+# ── 확인 실패는 "업데이트 없음"과 구분한다 ──
+
+
+def test_check_update_reports_failure_when_steamcmd_unavailable(tmp_path):
+    """SteamCMD를 쓸 수 없으면 원격을 모른다: 업데이트 없음이 아니라 확인 실패로 답한다."""
+    steam = SteamCMD(explicit_path="/fake/steamcmd")
+    with patch.object(type(steam), "available", new_callable=lambda: property(lambda self: False)):
+        result = steam.check_update(app_id=2394010, install_dir=str(tmp_path))
+    assert result["update_available"] is False
+    assert result["reason"] == "check_failed"
+    assert result["error"]
+
+
+def test_check_update_reports_failure_when_remote_buildid_missing(tmp_path):
+    """app_info_print가 답했지만 그 브랜치의 buildid가 없으면 확인 실패다."""
+    steam = SteamCMD(explicit_path="/fake/steamcmd")
+    with patch.object(steam, "_app_info_print", return_value="ERROR! Failed to connect\n"):
+        with patch.object(type(steam), "available", new_callable=lambda: property(lambda self: True)):
+            result = steam.check_update(app_id=2394010, install_dir=str(tmp_path))
+    assert result["reason"] == "check_failed"
+    assert "public" in result["error"]
+
+
+def test_check_update_success_has_no_failure_reason(tmp_path):
+    """원격 buildid를 읽었으면 확인 실패 표시를 붙이지 않는다."""
+    steam = SteamCMD(explicit_path="/fake/steamcmd")
+    raw = "branches\n  public\n    buildid: 5\n"
+    with patch.object(steam, "_app_info_print", return_value=raw):
+        with patch.object(type(steam), "available", new_callable=lambda: property(lambda self: True)):
+            result = steam.check_update(app_id=2394010, install_dir=str(tmp_path))
+    assert result["remote_buildid"] == "5"
+    assert "reason" not in result
