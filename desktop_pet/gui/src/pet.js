@@ -10,6 +10,9 @@ var h = React.createElement;
 var CELL_W = 192;
 var CELL_H = 208;
 var SCALE = 2 / 3;
+/** 말풍선 높이와, 여러 개를 겹쳐 쌓을 때 한 칸씩 내려가는 거리 (pet.css와 맞춘다) */
+var BUBBLE_H = 26;
+var BUBBLE_STEP = 19;
 /** 칸이 바뀌지 않아도 이만큼에 한 번은 상태 기계를 돌린다 (시간으로 바뀌는 잠·빗자루질·말풍선) */
 var TICK_MS = 250;
 
@@ -21,7 +24,11 @@ function Bubble(props) {
     var by = who ? who.user || t('source.' + (who.source || 'external'), { defaultValue: who.source || '' }) : '';
     return h(
         'div',
-        { className: 'saba-pet-bubble', 'data-state': bubble.state, role: 'status' },
+        {
+            className: 'saba-pet-bubble',
+            'data-state': bubble.state,
+            style: { transform: 'translateY(' + props.index * BUBBLE_STEP + 'px)', zIndex: props.count - props.index },
+        },
         h('span', { className: 'saba-pet-dot', 'aria-hidden': true }),
         h('span', { className: 'saba-pet-text' }, t(bubble.key, bubble.vars)),
         by ? h('span', { className: 'saba-pet-by' }, by) : null,
@@ -101,7 +108,19 @@ function Pet(props) {
                 setNow(Date.now());
             },
         },
-        view.bubble ? h(Bubble, { t: t, bubble: view.bubble }) : null,
+        view.bubbles.length
+            ? h(
+                  'div',
+                  {
+                      className: 'saba-pet-bubbles',
+                      role: 'status',
+                      style: { height: BUBBLE_H + (view.bubbles.length - 1) * BUBBLE_STEP + 'px' },
+                  },
+                  view.bubbles.map(function (b, i) {
+                      return h(Bubble, { key: b.id, t: t, bubble: b, index: i, count: view.bubbles.length });
+                  }),
+              )
+            : null,
         h(Sprite, { scene: view.scene, frame: frame }),
     );
 }

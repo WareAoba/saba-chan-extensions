@@ -18,6 +18,8 @@
     var COOK_STALE = 30 * MIN; // 설치 진행이 이만큼 끊기면 요리를 그만둔다
     var BUBBLE_MS = 6000;
     var BUBBLE_LONG_MS = 10000;
+    /** 한꺼번에 쌓는 말풍선 수 (넘치면 오래된 것부터 뺀다) */
+    var MAX_BUBBLES = 3;
 
     function pp(a, b) {
         // a..b..a+1 (왕복)
@@ -42,7 +44,7 @@
      * once 장면은 intro만 돌고 끝난다(그 뒤 기본 장면으로). 수리·빗자루질만 빠르게, 나머지는 느리게 (사용자 11-11)
      */
     var SCENES = {
-        idle: { frames: 6, intro: [], loop: pp(0, 5), ms: 240 },
+        idle: { frames: 6, intro: [], loop: pp(0, 5), ms: 400 },
         blink: { frames: 8, intro: range(0, 7), loop: null, ms: 110 },
         jump: { frames: 5, intro: range(0, 4), loop: null, ms: 120 },
         wave: { frames: 4, intro: repeat(pp(0, 3), 2), loop: null, ms: 200 },
@@ -109,7 +111,7 @@
             nextSweep: t0 + SWEEP_AFTER + between(random, SWEEP_GAP),
             nextBlink: t0 + between(random, BLINK_GAP),
             lastHover: -Infinity,
-            bubble: null, // {key, vars, state, until, during}
+            bubbles: [], // 작업마다 하나, 말한 순서: {id, key, vars, state, until, during}
         };
 
         function any(map) {
@@ -123,18 +125,33 @@
         }
 
         /**
-         * 말풍선: 대사가 아니라 할 일·한 일의 짧은 요약. state는 done(마친 일)·working(하는 중·할 일)·failed.
-         * during을 주면 그 장면(수리·요리)이 이어지는 동안 남는다
+         * 말풍선: 대사가 아니라 할 일·한 일의 짧은 요약. 작업(id)마다 하나를 두고 같은 작업은 제자리에서 바뀐다.
+         * state는 done(마친 일)·working(하는 중·할 일)·failed. during([표, 키])을 주면 그 일(수리·요리)이 이어지는 동안 남는다
          */
-        function say(key, vars, state, during) {
-            var long = state === 'failed';
-            st.bubble = {
+        function say(id, key, vars, state, during) {
+            var t = now();
+            st.bubbles = st.bubbles.filter(function (b) {
+                return b.id !== id;
+            });
+            st.bubbles.push({
+                id: id,
                 key: key,
                 vars: vars || {},
                 state: state,
-                until: during ? Infinity : now() + (long ? BUBBLE_LONG_MS : BUBBLE_MS),
+                until: during ? Infinity : t + (state === 'failed' ? BUBBLE_LONG_MS : BUBBLE_MS),
                 during: during || null,
-            };
+            });
+            // 넘치면 끝난 일 중 오래된 것부터 뺀다 (하는 중인 일은 끝날 때까지 둔다)
+            while (st.bubbles.length > MAX_BUBBLES) {
+                var drop = 0;
+                for (var i = 0; i < st.bubbles.length; i++) {
+                    if (st.bubbles[i].state !== 'working') {
+                        drop = i;
+                        break;
+                    }
+                }
+                st.bubbles.splice(drop, 1);
+            }
         }
 
         /** 일이 있었다. 자고 있었으면 깬다 */
@@ -149,9 +166,10 @@
             var t = now();
             for (var id in st.repairing) if (st.repairing[id] <= t) delete st.repairing[id];
             for (var key in st.cooking) if (st.cooking[key] + COOK_STALE <= t) delete st.cooking[key];
-            if (st.bubble && st.bubble.until <= t) st.bubble = null;
-            if (st.bubble && st.bubble.during === 'repair' && !any(st.repairing)) st.bubble = null;
-            if (st.bubble && st.bubble.during === 'cooking' && !any(st.cooking)) st.bubble = null;
+            st.bubbles = st.bubbles.filter(function (b) {
+                if (b.during) return Object.prototype.hasOwnProperty.call(st[b.during[0]], b.during[1]);
+                return b.until > t;
+            });
             if (st.once && now() - st.once.at >= sceneLength(st.once.scene)) st.once = null;
         }
 
@@ -196,19 +214,19 @@
                     activity();
                     delete st.collapsed[id];
                     delete st.repairing[id];
-                    if (remote) say('bubble.started', { server: name, who: who }, 'done');
+                    if (remote) say('srv:' + id, 'bubble.started', { server: name, who: who }, 'done');
                     play('think');
                     break;
                 case 'instance.ready':
                     activity();
                     play(data.ok === false ? 'scratch' : 'wave');
-                    if (data.ok === false) say('bubble.not_ready', { server: name }, 'failed');
+                    if (data.ok === false) say('srv:' + id, 'bubble.not_ready', { server: name }, 'failed');
                     break;
                 case 'instance.stopped':
                     activity();
                     delete st.collapsed[id];
                     delete st.repairing[id];
-                    if (remote) say('bubble.stopped', { server: name, who: who }, 'done');
+                    if (remote) say('srv:' + id, 'bubble.stopped', { server: name, who: who }, 'done');
                     play('clasp');
                     break;
                 case 'instance.exit':
@@ -217,16 +235,16 @@
                     st.once = null;
                     if (typeof data.restartInSecs === 'number') {
                         st.repairing[id] = now() + data.restartInSecs * 1000 + REPAIR_GRACE;
-                        say('bubble.restarting', { server: name }, 'working', 'repair');
+                        say('srv:' + id, 'bubble.restarting', { server: name }, 'working', ['repairing', id]);
                     } else {
                         st.collapsed[id] = true;
-                        say(data.kind === 'start_failed' ? 'bubble.start_failed' : 'bubble.crash', { server: name }, 'failed');
+                        say('srv:' + id, data.kind === 'start_failed' ? 'bubble.start_failed' : 'bubble.crash', { server: name }, 'failed');
                     }
                     break;
                 case 'instance.restarted':
                     activity();
                     delete st.repairing[id];
-                    say('bubble.restarted', { server: name }, 'done');
+                    say('srv:' + id, 'bubble.restarted', { server: name }, 'done');
                     play('wave', true);
                     break;
                 case 'instance.restart_failed':
@@ -234,7 +252,7 @@
                     delete st.repairing[id];
                     st.collapsed[id] = true;
                     st.once = null;
-                    say('bubble.restart_failed', { server: name }, 'failed');
+                    say('srv:' + id, 'bubble.restart_failed', { server: name }, 'failed');
                     break;
                 case 'instance.restart_cancelled':
                     delete st.repairing[id];
@@ -247,35 +265,35 @@
                         var wasCooking = Object.prototype.hasOwnProperty.call(st.cooking, key);
                         delete st.cooking[key];
                         if (data.error) {
-                            say('bubble.provision_failed', { server: key }, 'failed');
+                            say('prov:' + key, 'bubble.provision_failed', { server: key }, 'failed');
                             play('scratch', true);
                         } else if (wasCooking) {
-                            say('bubble.provision_done', { server: key }, 'done');
+                            say('prov:' + key, 'bubble.provision_done', { server: key }, 'done');
                             play('served', true);
                         }
                     } else {
                         st.cooking[key] = now();
-                        say('bubble.installing', { server: key }, 'working', 'cooking');
+                        say('prov:' + key, 'bubble.installing', { server: key }, 'working', ['cooking', key]);
                     }
                     break;
                 }
                 case 'backup.done':
                     if (data.ok === false) {
                         activity();
-                        say('bubble.backup_failed', { server: name }, 'failed');
+                        say('backup:' + id, 'bubble.backup_failed', { server: name }, 'failed');
                         play('scratch');
                     }
                     break;
                 case 'schedule.warn':
                     activity();
-                    say('bubble.schedule_' + (['restart', 'stop', 'update'].indexOf(data.action) >= 0 ? data.action : 'other'), {
+                    say('schedule:' + id, 'bubble.schedule_' + (['restart', 'stop', 'update'].indexOf(data.action) >= 0 ? data.action : 'other'), {
                         server: name,
                         minutes: data.minutesLeft,
                     }, 'working');
                     play('think');
                     break;
                 case 'update.available':
-                    say('bubble.update_available', {}, 'done');
+                    say('update', 'bubble.update_available', {}, 'done');
                     play('clasp');
                     break;
                 default:
@@ -302,7 +320,7 @@
         /** 눌렀다: 쓰러진 것은 일으키고(앱은 셸이 연다), 말풍선은 닫는다 */
         function click() {
             st.collapsed = {};
-            st.bubble = null;
+            st.bubbles = [];
             activity();
             tick();
         }
@@ -310,9 +328,19 @@
         /** 지금 그릴 것: 장면 이름, 그 장면이 시작한 시각, 말풍선 */
         function view() {
             expire();
-            var b = st.bubble && { key: st.bubble.key, vars: st.bubble.vars, state: st.bubble.state };
-            if (st.once) return { scene: st.once.scene, at: st.once.at, bubble: b };
-            return { scene: st.base, at: st.baseAt, bubble: b };
+            // 끝난 일(마침·실패)을 위로, 하는 중인 일을 아래로. 같은 쪽에서는 새것이 위
+            // st.bubbles는 말한 순서라 뒤집으면 새것이 앞이다 (같은 때 말한 것도)
+            var b = st.bubbles
+                .slice()
+                .reverse()
+                .sort(function (x, y) {
+                    return (x.state === 'working' ? 1 : 0) - (y.state === 'working' ? 1 : 0);
+                })
+                .map(function (x) {
+                    return { id: x.id, key: x.key, vars: x.vars, state: x.state };
+                });
+            if (st.once) return { scene: st.once.scene, at: st.once.at, bubbles: b };
+            return { scene: st.base, at: st.baseAt, bubbles: b };
         }
 
         tick();
