@@ -400,43 +400,153 @@ function clock(at) {
     }
 }
 
+/** 움직임을 줄이라고 한 시스템이면 말풍선 움직임을 뺀다 */
+function reducedMotion() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+/** 사라지는 말풍선을 이만큼 더 그려 둔다 (pet.css saba-pet-leave와 맞춘다) */
+var LEAVE_MS = 420;
+
 /**
  * 말풍선 두 줄. 첫 줄: 한 일(선명)과 시킨 사람(흐림, 이름이 없으면 출처).
- * 둘째 줄(작고 흐림): 시각, 이름이 있으면 출처, 장소(디스코드 서버 이름)
+ * 둘째 줄(작고 흐림): 시각, 이름이 있으면 출처, 장소(디스코드 서버 이름).
+ * 움직임: 나타날 때 아래에서 튀어 오르고, 같은 작업의 내용이 바뀌면 너비가 늘거나 줄며 글자가 갈아 끼워지고,
+ * 끝나거나 실패하면 한 번 통 튀며 점이 퍼진다. 자리를 바꾸면 튕기듯 미끄러지고, 사라질 때는 위로 흩어진다
  */
 function Bubble(props) {
     var t = props.t;
     var bubble = props.bubble;
+    var ref = React.useRef(null);
+    var last = React.useRef(null);
     var who = bubble.vars.who;
     var source = who ? t('source.' + (who.source || 'external'), { defaultValue: who.source || '' }) : '';
     var by = who ? who.user || source : '';
     var meta = [clock(bubble.at)];
     if (who && who.user && source) meta.push(source);
     if (who && who.place) meta.push(who.place);
+    var front = props.index === 0 && !props.leaving;
+    var sig = bubble.key + '|' + bubble.state + '|' + (front ? 'front' : 'back');
+
+    React.useLayoutEffect(
+        function () {
+            var el = ref.current;
+            if (!el || props.leaving) return;
+            var prev = last.current;
+            el.style.width = '';
+            var natural = el.getBoundingClientRect().width;
+            if (front && prev && prev.front && !reducedMotion() && typeof el.animate === 'function') {
+                // 같은 작업의 내용이 바뀌었다: 너비를 이어서 바꾸고, 끝났거나 실패했으면 한 번 튄다
+                if (Math.abs(prev.width - natural) > 1) {
+                    el.animate([{ width: prev.width + 'px' }, { width: natural + 'px' }], {
+                        duration: 420,
+                        easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)',
+                    });
+                }
+                if (prev.state !== bubble.state && bubble.state !== 'working') {
+                    el.animate([{ scale: '1' }, { scale: '1.08' }, { scale: '0.98' }, { scale: '1' }], {
+                        duration: 520,
+                        easing: 'ease-out',
+                    });
+                }
+            }
+            last.current = { width: natural, state: bubble.state, front: front };
+            if (front && props.onWidth) props.onWidth(bubble.id, natural);
+        },
+        [sig],
+    );
+
+    var style = {
+        transform: 'translateY(' + props.index * BUBBLE_STEP + 'px) scale(' + (1 - props.index * BUBBLE_SHRINK) + ')',
+        zIndex: props.leaving ? 0 : props.count - props.index,
+    };
+    // 사라지는 맨 앞 말풍선은 마지막 너비 그대로 가운데에 둔다
+    if (props.leaving && props.width) {
+        style.width = props.width + 'px';
+        style.left = '50%';
+        style.right = 'auto';
+        style.marginLeft = -props.width / 2 + 'px';
+    }
+    var content = bubble.key + '|' + bubble.state;
     return h(
         'div',
         {
+            ref: ref,
             className: 'saba-pet-bubble',
             'data-state': bubble.state,
-            'data-behind': props.index > 0 ? 'true' : undefined,
-            'aria-hidden': props.index > 0 ? true : undefined,
-            style: {
-                transform: 'translateY(' + props.index * BUBBLE_STEP + 'px) scale(' + (1 - props.index * BUBBLE_SHRINK) + ')',
-                zIndex: props.count - props.index,
-            },
+            'data-behind': front ? undefined : 'true',
+            'data-leaving': props.leaving ? (props.index === 0 ? 'front' : 'back') : undefined,
+            'aria-hidden': front ? undefined : true,
+            style: style,
         },
-        h('span', { className: 'saba-pet-dot', 'aria-hidden': true }),
+        // 상태가 바뀌면 점을 새로 그려 튀어나오게, 글자는 새로 그려 아래에서 올라오게 한다
+        h('span', { key: 'dot-' + bubble.state, className: 'saba-pet-dot', 'aria-hidden': true }),
         h(
             'span',
-            { className: 'saba-pet-line' },
+            { key: 'line-' + content, className: 'saba-pet-line' },
             h('span', { className: 'saba-pet-text' }, t(bubble.key, bubble.vars)),
             by ? h('span', { className: 'saba-pet-by' }, by) : null,
         ),
-        h(
-            'span',
-            { className: 'saba-pet-meta' },
-            meta.filter(Boolean).join(' · '),
-        ),
+        h('span', { key: 'meta-' + content, className: 'saba-pet-meta' }, meta.filter(Boolean).join(' · ')),
+    );
+}
+
+/** 말풍선 더미: 지금 말풍선과, 막 사라져 흩어지는 중인 말풍선 */
+function Bubbles(props) {
+    var shown = React.useRef({}); // id → {bubble, index}
+    var leaving = React.useRef({}); // id → {bubble, index, since}
+    var widths = React.useRef({});
+    var now = Date.now();
+    var current = {};
+    props.bubbles.forEach(function (b, i) {
+        current[b.id] = { bubble: b, index: i };
+    });
+    var id;
+    for (id in shown.current) {
+        if (!current[id] && !leaving.current[id]) {
+            leaving.current[id] = { bubble: shown.current[id].bubble, index: shown.current[id].index, since: now };
+        }
+    }
+    for (id in leaving.current) {
+        if (current[id] || now - leaving.current[id].since >= LEAVE_MS || reducedMotion()) delete leaving.current[id];
+    }
+    shown.current = current;
+
+    var gone = Object.keys(leaving.current).map(function (k) {
+        return leaving.current[k];
+    });
+    if (!props.bubbles.length && !gone.length) return null;
+    var count = props.bubbles.length;
+    var onWidth = function (bid, w) {
+        widths.current[bid] = w;
+    };
+    return h(
+        'div',
+        {
+            className: 'saba-pet-bubbles',
+            role: 'status',
+            style: {
+                height: count ? BUBBLE_H + (count - 1) * BUBBLE_STEP + 'px' : BUBBLE_H + 'px',
+                minWidth: !count && gone.length ? (widths.current[gone[0].bubble.id] || 0) + 'px' : undefined,
+            },
+        },
+        props.bubbles
+            .map(function (b, i) {
+                return h(Bubble, { key: b.id, t: props.t, bubble: b, index: i, count: count, onWidth: onWidth });
+            })
+            .concat(
+                gone.map(function (g) {
+                    return h(Bubble, {
+                        key: g.bubble.id,
+                        t: props.t,
+                        bubble: g.bubble,
+                        index: g.index,
+                        count: count,
+                        leaving: true,
+                        width: widths.current[g.bubble.id],
+                    });
+                }),
+            ),
     );
 }
 
@@ -513,19 +623,7 @@ function Pet(props) {
                 setNow(Date.now());
             },
         },
-        view.bubbles.length
-            ? h(
-                  'div',
-                  {
-                      className: 'saba-pet-bubbles',
-                      role: 'status',
-                      style: { height: BUBBLE_H + (view.bubbles.length - 1) * BUBBLE_STEP + 'px' },
-                  },
-                  view.bubbles.map(function (b, i) {
-                      return h(Bubble, { key: b.id, t: t, bubble: b, index: i, count: view.bubbles.length });
-                  }),
-              )
-            : null,
+        h(Bubbles, { t: t, bubbles: view.bubbles }),
         h(Sprite, { scene: view.scene, frame: frame }),
     );
 }
