@@ -26,5 +26,6 @@
     "schedule_update": "Обновление {{server}} через {{minutes}} мин",
     "schedule_other": "Задача {{server}} через {{minutes}} мин",
     "update_available": "Есть обновление"
-  }
+  },
+  "close": "Закрыть"
 }

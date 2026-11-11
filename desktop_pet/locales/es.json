@@ -26,5 +26,6 @@
     "schedule_update": "Actualización de {{server}} en {{minutes}} min",
     "schedule_other": "Tarea de {{server}} en {{minutes}} min",
     "update_available": "Actualización disponible"
-  }
+  },
+  "close": "Cerrar"
 }

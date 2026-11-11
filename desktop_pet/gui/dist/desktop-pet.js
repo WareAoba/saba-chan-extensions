@@ -20,10 +20,11 @@ var module = { exports: {} };
     var HOVER_GAP = 3 * 1000; // 점프는 이만큼에 한 번
     var REPAIR_GRACE = 3 * MIN; // 다시 켜기 대기 + 이만큼이 지나도 결과가 없으면 고치기를 그만둔다
     var COOK_STALE = 30 * MIN; // 설치 진행이 이만큼 끊기면 요리를 그만둔다
-    var BUBBLE_MS = 6000;
-    var BUBBLE_LONG_MS = 10000;
-    /** 한꺼번에 쌓는 말풍선 수 (넘치면 오래된 것부터 뺀다) */
-    var MAX_BUBBLES = 3;
+    /** 단순한 일(켜기·끄기·다시 켜기·예고) 말풍선은 금방 지운다. 오래 기다린 일(설치)·실패는 사용자가 닫을 때까지 둔다 (사용자 11-11) */
+    var BUBBLE_MS = 4000;
+    var STICKY_KEYS = ['bubble.provision_done'];
+    /** 들고 있는 말풍선 수 (넘치면 끝난 일 중 오래된 것부터 뺀다). 화면에는 앞의 몇 개만 겹쳐 보인다 */
+    var MAX_BUBBLES = 8;
 
     function pp(a, b) {
         // a..b..a+1 (왕복)
@@ -131,8 +132,18 @@ var module = { exports: {} };
 
         /**
          * 말풍선: 대사가 아니라 할 일·한 일의 짧은 요약. 작업(id)마다 하나를 두고 같은 작업은 제자리에서 바뀐다.
-         * state는 done(마친 일)·working(하는 중·할 일)·failed. during([표, 키])을 주면 그 일(수리·요리)이 이어지는 동안 남는다
+         * state는 done(마친 일)·working(하는 중·할 일)·failed. during([표, 키])을 주면 그 일(수리·요리)이 이어지는 동안 남는다.
+         * target은 누르면 열 앱 화면: 서버(`server:<id>`), 설치한 서버 이름(`provision:<이름>`, 화면이 id를 찾는다), 설정(`settings`)
          */
+        function targetOf(id) {
+            var at = id.indexOf(':');
+            var kind = at < 0 ? id : id.slice(0, at);
+            var rest = at < 0 ? '' : id.slice(at + 1);
+            if (kind === 'prov') return 'provision:' + rest;
+            if (kind === 'update') return 'settings';
+            return rest ? 'server:' + rest : null;
+        }
+
         function say(id, key, vars, state, during) {
             var t = now();
             st.bubbles = st.bubbles.filter(function (b) {
@@ -144,8 +155,9 @@ var module = { exports: {} };
                 vars: vars || {},
                 state: state,
                 at: t,
-                until: during ? Infinity : t + (state === 'failed' ? BUBBLE_LONG_MS : BUBBLE_MS),
+                until: during || state === 'failed' || STICKY_KEYS.indexOf(key) >= 0 ? Infinity : t + BUBBLE_MS,
                 during: during || null,
+                target: targetOf(id),
             });
             // 넘치면 끝난 일 중 오래된 것부터 뺀다 (하는 중인 일은 끝날 때까지 둔다)
             while (st.bubbles.length > MAX_BUBBLES) {
@@ -326,12 +338,18 @@ var module = { exports: {} };
             play('jump');
         }
 
-        /** 눌렀다: 쓰러진 것은 일으키고(앱은 셸이 연다), 말풍선은 닫는다 */
+        /** 눌렀다: 쓰러진 것은 일으킨다(앱은 셸이 연다). 말풍선은 닫기 버튼으로만 닫는다 */
         function click() {
             st.collapsed = {};
-            st.bubbles = [];
             activity();
             tick();
+        }
+
+        /** 말풍선 하나를 닫았다 (닫기 버튼, 또는 눌러서 그 화면으로 갔다) */
+        function dismiss(id) {
+            st.bubbles = st.bubbles.filter(function (b) {
+                return b.id !== id;
+            });
         }
 
         /** 지금 그릴 것: 장면 이름, 그 장면이 시작한 시각, 말풍선 */
@@ -346,14 +364,14 @@ var module = { exports: {} };
                     return (x.state === 'working' ? 1 : 0) - (y.state === 'working' ? 1 : 0);
                 })
                 .map(function (x) {
-                    return { id: x.id, key: x.key, vars: x.vars, state: x.state, at: x.at };
+                    return { id: x.id, key: x.key, vars: x.vars, state: x.state, at: x.at, target: x.target };
                 });
             if (st.once) return { scene: st.once.scene, at: st.once.at, bubbles: b };
             return { scene: st.base, at: st.baseAt, bubbles: b };
         }
 
         tick();
-        return { event: event, hover: hover, click: click, tick: tick, view: view };
+        return { event: event, hover: hover, click: click, dismiss: dismiss, tick: tick, view: view };
     }
 
     var api = {
@@ -407,12 +425,17 @@ function reducedMotion() {
 
 /** 사라지는 말풍선을 이만큼 더 그려 둔다 (pet.css saba-pet-leave와 맞춘다) */
 var LEAVE_MS = 420;
+/** 겹쳐 보이는 말풍선 수 (나머지는 앞의 것을 닫으면 올라온다) */
+var SHOWN_BUBBLES = 3;
+/** 누른 채 이만큼 움직였으면 누르기가 아니라 끌기 (셸 DesktopOverlay와 같다, px) */
+var DRAG_THRESHOLD = 4;
 
 /**
  * 말풍선 두 줄. 첫 줄: 한 일(선명)과 시킨 사람(흐림, 이름이 없으면 출처).
  * 둘째 줄(작고 흐림): 시각, 이름이 있으면 출처, 장소(디스코드 서버 이름).
  * 움직임: 나타날 때 아래에서 튀어 오르고, 같은 작업의 내용이 바뀌면 너비가 늘거나 줄며 글자가 갈아 끼워지고,
- * 끝나거나 실패하면 한 번 통 튀며 점에서 물결이 퍼진다. 자리를 바꾸면 튕기듯 미끄러지고, 사라질 때는 위로 흩어진다
+ * 끝나거나 실패하면 한 번 통 튀며 점에서 물결이 퍼진다. 자리를 바꾸면 튕기듯 미끄러지고, 사라질 때는 위로 흩어진다.
+ * 맨 앞 말풍선: 올리면 오른쪽 위에 닫기 버튼, 누르면 앱의 그 화면으로 간다(셸의 "누르면 앱 열기" 대신)
  */
 function Bubble(props) {
     var t = props.t;
@@ -468,6 +491,26 @@ function Bubble(props) {
         style.marginLeft = -props.width / 2 + 'px';
     }
     var content = bubble.key + '|' + bubble.state;
+    var press = React.useRef(null);
+    var events = {};
+    if (front) {
+        events = {
+            onPointerDown: function (e) {
+                press.current = e.button === 0 ? { x: e.screenX, y: e.screenY } : null;
+            },
+            onPointerUp: function (e) {
+                var p = press.current;
+                press.current = null;
+                if (!p || e.button !== 0) return;
+                if (Math.hypot(e.screenX - p.x, e.screenY - p.y) >= DRAG_THRESHOLD) return;
+                e.stopPropagation();
+                props.onOpen(bubble);
+            },
+        };
+    }
+    var stop = function (e) {
+        e.stopPropagation();
+    };
     return h(
         'div',
         {
@@ -478,6 +521,8 @@ function Bubble(props) {
             'data-leaving': props.leaving ? (props.index === 0 ? 'front' : 'back') : undefined,
             'aria-hidden': front ? undefined : true,
             style: style,
+            onPointerDown: events.onPointerDown,
+            onPointerUp: events.onPointerUp,
         },
         // 상태가 바뀌면 점을 새로 그려 스며들게, 글자는 새로 그려 아래에서 올라오게 한다
         h('span', { key: 'dot-' + bubble.state, className: 'saba-pet-dot', 'aria-hidden': true }),
@@ -488,6 +533,30 @@ function Bubble(props) {
             by ? h('span', { className: 'saba-pet-by' }, by) : null,
         ),
         h('span', { key: 'meta-' + content, className: 'saba-pet-meta' }, meta.filter(Boolean).join(' · ')),
+        front
+            ? h(
+                  'button',
+                  {
+                      key: 'close',
+                      type: 'button',
+                      className: 'saba-pet-close',
+                      'aria-label': t('close'),
+                      title: t('close'),
+                      // 끌기·앱 열기로 번지지 않게
+                      onPointerDown: stop,
+                      onPointerUp: function (e) {
+                          e.stopPropagation();
+                          if (e.button === 0) props.onClose(bubble.id);
+                      },
+                      onClick: stop,
+                  },
+                  h(
+                      'svg',
+                      { viewBox: '0 0 10 10', width: 8, height: 8, 'aria-hidden': true },
+                      h('path', { d: 'M1.5 1.5l7 7M8.5 1.5l-7 7', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' }),
+                  ),
+              )
+            : null,
     );
 }
 
@@ -498,7 +567,8 @@ function Bubbles(props) {
     var widths = React.useRef({});
     var now = Date.now();
     var current = {};
-    props.bubbles.forEach(function (b, i) {
+    var bubbles = props.bubbles.slice(0, SHOWN_BUBBLES);
+    bubbles.forEach(function (b, i) {
         current[b.id] = { bubble: b, index: i };
     });
     var id;
@@ -515,8 +585,8 @@ function Bubbles(props) {
     var gone = Object.keys(leaving.current).map(function (k) {
         return leaving.current[k];
     });
-    if (!props.bubbles.length && !gone.length) return null;
-    var count = props.bubbles.length;
+    if (!bubbles.length && !gone.length) return null;
+    var count = bubbles.length;
     var onWidth = function (bid, w) {
         widths.current[bid] = w;
     };
@@ -530,9 +600,18 @@ function Bubbles(props) {
                 minWidth: !count && gone.length ? (widths.current[gone[0].bubble.id] || 0) + 'px' : undefined,
             },
         },
-        props.bubbles
+        bubbles
             .map(function (b, i) {
-                return h(Bubble, { key: b.id, t: props.t, bubble: b, index: i, count: count, onWidth: onWidth });
+                return h(Bubble, {
+                    key: b.id,
+                    t: props.t,
+                    bubble: b,
+                    index: i,
+                    count: count,
+                    onWidth: onWidth,
+                    onOpen: props.onOpen,
+                    onClose: props.onClose,
+                });
             })
             .concat(
                 gone.map(function (g) {
@@ -623,7 +702,28 @@ function Pet(props) {
                 setNow(Date.now());
             },
         },
-        h(Bubbles, { t: t, bubbles: view.bubbles }),
+        h(Bubbles, {
+            t: t,
+            bubbles: view.bubbles,
+            // 누르면 앱의 그 화면으로 가고 그 말풍선은 닫는다. 설치한 서버는 이름으로 id를 찾는다
+            onOpen: function (bubble) {
+                var route = bubble.target || 'servers';
+                if (route.indexOf('provision:') === 0) {
+                    var name = route.slice('provision:'.length);
+                    var server = (host.servers() || []).filter(function (x) {
+                        return x.name === name;
+                    })[0];
+                    route = server ? 'server:' + server.id : 'servers';
+                }
+                host.openApp(route);
+                machine.dismiss(bubble.id);
+                setNow(Date.now());
+            },
+            onClose: function (id) {
+                machine.dismiss(id);
+                setNow(Date.now());
+            },
+        }),
         h(Sprite, { scene: view.scene, frame: frame }),
     );
 }

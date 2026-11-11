@@ -26,5 +26,6 @@
     "schedule_update": "{{minutes}} 分鐘後更新 {{server}}",
     "schedule_other": "{{minutes}} 分鐘後 {{server}} 排程工作",
     "update_available": "有新更新"
-  }
+  },
+  "close": "關閉"
 }

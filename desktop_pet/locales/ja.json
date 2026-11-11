@@ -26,5 +26,6 @@
     "schedule_update": "{{minutes}}分後 {{server}} アップデート",
     "schedule_other": "{{minutes}}分後 {{server}} 予約タスク",
     "update_available": "新しいアップデートあり"
-  }
+  },
+  "close": "閉じる"
 }

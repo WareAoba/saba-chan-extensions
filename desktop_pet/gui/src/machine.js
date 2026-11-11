@@ -16,10 +16,11 @@
     var HOVER_GAP = 3 * 1000; // 점프는 이만큼에 한 번
     var REPAIR_GRACE = 3 * MIN; // 다시 켜기 대기 + 이만큼이 지나도 결과가 없으면 고치기를 그만둔다
     var COOK_STALE = 30 * MIN; // 설치 진행이 이만큼 끊기면 요리를 그만둔다
-    var BUBBLE_MS = 6000;
-    var BUBBLE_LONG_MS = 10000;
-    /** 한꺼번에 쌓는 말풍선 수 (넘치면 오래된 것부터 뺀다) */
-    var MAX_BUBBLES = 3;
+    /** 단순한 일(켜기·끄기·다시 켜기·예고) 말풍선은 금방 지운다. 오래 기다린 일(설치)·실패는 사용자가 닫을 때까지 둔다 (사용자 11-11) */
+    var BUBBLE_MS = 4000;
+    var STICKY_KEYS = ['bubble.provision_done'];
+    /** 들고 있는 말풍선 수 (넘치면 끝난 일 중 오래된 것부터 뺀다). 화면에는 앞의 몇 개만 겹쳐 보인다 */
+    var MAX_BUBBLES = 8;
 
     function pp(a, b) {
         // a..b..a+1 (왕복)
@@ -127,8 +128,18 @@
 
         /**
          * 말풍선: 대사가 아니라 할 일·한 일의 짧은 요약. 작업(id)마다 하나를 두고 같은 작업은 제자리에서 바뀐다.
-         * state는 done(마친 일)·working(하는 중·할 일)·failed. during([표, 키])을 주면 그 일(수리·요리)이 이어지는 동안 남는다
+         * state는 done(마친 일)·working(하는 중·할 일)·failed. during([표, 키])을 주면 그 일(수리·요리)이 이어지는 동안 남는다.
+         * target은 누르면 열 앱 화면: 서버(`server:<id>`), 설치한 서버 이름(`provision:<이름>`, 화면이 id를 찾는다), 설정(`settings`)
          */
+        function targetOf(id) {
+            var at = id.indexOf(':');
+            var kind = at < 0 ? id : id.slice(0, at);
+            var rest = at < 0 ? '' : id.slice(at + 1);
+            if (kind === 'prov') return 'provision:' + rest;
+            if (kind === 'update') return 'settings';
+            return rest ? 'server:' + rest : null;
+        }
+
         function say(id, key, vars, state, during) {
             var t = now();
             st.bubbles = st.bubbles.filter(function (b) {
@@ -140,8 +151,9 @@
                 vars: vars || {},
                 state: state,
                 at: t,
-                until: during ? Infinity : t + (state === 'failed' ? BUBBLE_LONG_MS : BUBBLE_MS),
+                until: during || state === 'failed' || STICKY_KEYS.indexOf(key) >= 0 ? Infinity : t + BUBBLE_MS,
                 during: during || null,
+                target: targetOf(id),
             });
             // 넘치면 끝난 일 중 오래된 것부터 뺀다 (하는 중인 일은 끝날 때까지 둔다)
             while (st.bubbles.length > MAX_BUBBLES) {
@@ -322,12 +334,18 @@
             play('jump');
         }
 
-        /** 눌렀다: 쓰러진 것은 일으키고(앱은 셸이 연다), 말풍선은 닫는다 */
+        /** 눌렀다: 쓰러진 것은 일으킨다(앱은 셸이 연다). 말풍선은 닫기 버튼으로만 닫는다 */
         function click() {
             st.collapsed = {};
-            st.bubbles = [];
             activity();
             tick();
+        }
+
+        /** 말풍선 하나를 닫았다 (닫기 버튼, 또는 눌러서 그 화면으로 갔다) */
+        function dismiss(id) {
+            st.bubbles = st.bubbles.filter(function (b) {
+                return b.id !== id;
+            });
         }
 
         /** 지금 그릴 것: 장면 이름, 그 장면이 시작한 시각, 말풍선 */
@@ -342,14 +360,14 @@
                     return (x.state === 'working' ? 1 : 0) - (y.state === 'working' ? 1 : 0);
                 })
                 .map(function (x) {
-                    return { id: x.id, key: x.key, vars: x.vars, state: x.state, at: x.at };
+                    return { id: x.id, key: x.key, vars: x.vars, state: x.state, at: x.at, target: x.target };
                 });
             if (st.once) return { scene: st.once.scene, at: st.once.at, bubbles: b };
             return { scene: st.base, at: st.baseAt, bubbles: b };
         }
 
         tick();
-        return { event: event, hover: hover, click: click, tick: tick, view: view };
+        return { event: event, hover: hover, click: click, dismiss: dismiss, tick: tick, view: view };
     }
 
     var api = {

@@ -23,6 +23,7 @@
     --pb-faint: rgba(255, 255, 255, 0.5);
     --pb-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
     --pb-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --pb-solid-bg: #0a0b0f;
 }
 
 html[data-theme='light'] .saba-pet {
@@ -34,6 +35,7 @@ html[data-theme='light'] .saba-pet {
     --pb-faint: rgba(20, 22, 27, 0.4);
     --pb-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
     --pb-text-shadow: none;
+    --pb-solid-bg: #fff;
 }
 
 @media (prefers-color-scheme: light) {
@@ -47,6 +49,7 @@ html[data-theme='light'] .saba-pet {
         --pb-faint: rgba(20, 22, 27, 0.4);
         --pb-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
         --pb-text-shadow: none;
+        --pb-solid-bg: #fff;
     }
 }
 
@@ -124,6 +127,45 @@ html[data-theme='light'] .saba-pet {
 
 .saba-pet-bubble[data-behind] > * {
     opacity: 0;
+}
+
+/* 맨 앞 말풍선: 누르면 앱의 그 화면으로. 올리면 오른쪽 위에 닫기 버튼 */
+.saba-pet-bubble:not([data-behind]) {
+    cursor: pointer;
+}
+
+.saba-pet-close {
+    position: absolute;
+    /* 펫 창(.saba-pet 위 4px·옆 8px 여백) 밖으로 나가 잘리지 않게 */
+    top: -3px;
+    right: -3px;
+    width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--pb-border);
+    background: var(--pb-bg);
+    color: var(--pb-fg);
+    box-shadow: var(--pb-shadow);
+    cursor: pointer;
+    opacity: 0;
+    scale: 0.7;
+    transition:
+        opacity 0.18s ease,
+        scale 0.18s ease;
+}
+
+.saba-pet-bubble:hover .saba-pet-close,
+.saba-pet-close:focus-visible {
+    opacity: 1;
+    scale: 1;
+}
+
+.saba-pet-close:hover {
+    background: var(--pb-fg);
+    color: var(--pb-solid-bg, #000);
 }
 
 .saba-pet-dot {

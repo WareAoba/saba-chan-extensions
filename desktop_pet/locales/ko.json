@@ -26,5 +26,6 @@
     "schedule_update": "{{minutes}}분 뒤 {{server}} 업데이트",
     "schedule_other": "{{minutes}}분 뒤 {{server}} 예약 작업",
     "update_available": "새 업데이트 있음"
-  }
+  },
+  "close": "닫기"
 }
