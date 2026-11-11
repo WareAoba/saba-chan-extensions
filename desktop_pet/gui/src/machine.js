@@ -112,7 +112,7 @@
             nextSweep: t0 + SWEEP_AFTER + between(random, SWEEP_GAP),
             nextBlink: t0 + between(random, BLINK_GAP),
             lastHover: -Infinity,
-            bubbles: [], // 작업마다 하나, 말한 순서: {id, key, vars, state, until, during}
+            bubbles: [], // 작업마다 하나, 말한 순서: {id, key, vars, state, at, until, during}
         };
 
         function any(map) {
@@ -139,6 +139,7 @@
                 key: key,
                 vars: vars || {},
                 state: state,
+                at: t,
                 until: during ? Infinity : t + (state === 'failed' ? BUBBLE_LONG_MS : BUBBLE_MS),
                 during: during || null,
             });
@@ -208,7 +209,10 @@
             data = data || {};
             var id = data.instanceId;
             var name = data.instance || '';
-            var who = data.userName ? { user: data.userName } : { source: data.source };
+            // 시킨 쪽: 출처, 이름(디스코드 표시 이름·원격 PC 이름), 장소(디스코드 서버 이름)
+            var who = { source: data.source };
+            if (data.userName) who.user = data.userName;
+            if (data.guildName) who.place = data.guildName;
             var remote = REMOTE_SOURCES.indexOf(data.source) >= 0;
             switch (type) {
                 case 'instance.started':
@@ -338,7 +342,7 @@
                     return (x.state === 'working' ? 1 : 0) - (y.state === 'working' ? 1 : 0);
                 })
                 .map(function (x) {
-                    return { id: x.id, key: x.key, vars: x.vars, state: x.state };
+                    return { id: x.id, key: x.key, vars: x.vars, state: x.state, at: x.at };
                 });
             if (st.once) return { scene: st.once.scene, at: st.once.at, bubbles: b };
             return { scene: st.base, at: st.baseAt, bubbles: b };

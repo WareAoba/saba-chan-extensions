@@ -13,32 +13,40 @@
     flex: none;
 }
 
-/* 말풍선: 꼬리 없는 알약. 마친 일은 초록 점, 하는 중·할 일은 깜빡이는 회색 점과 글자 위를 지나가는 빛, 실패는 빨간 점.
+/* 말풍선: 앱 테마와 상관없는 반투명 유리. 두 줄: 한 일(선명)·시킨 사람(흐림) / 시각·출처·장소(작고 흐림).
+   마친 일은 초록 점, 하는 중·할 일은 깜빡이는 회색 점과 글자 위를 지나가는 빛, 실패는 빨간 점.
    여러 작업이면 맨 앞(끝난 일 먼저)만 글자를 보이고 뒤 말풍선은 아래로 조금씩 삐져나오게 겹친다.
-   자리가 바뀌면 미끄러져 옮긴다. 높이 26px, 6px씩, 6%씩 작게 (pet.js) */
+   바탕화면은 웹 화면 밖이라 흐리게 비치지 않는다: 어두운 반투명 바탕과 빛 테두리로 유리를 낸다.
+   높이 42px, 6px씩, 6%씩 작게 (pet.js) */
 .saba-pet-bubbles {
     position: relative;
     width: fit-content;
-    max-width: 240px;
+    max-width: 250px;
     margin-bottom: 6px;
 }
 
 .saba-pet-bubble {
     position: relative;
-    max-width: 240px;
-    height: 26px;
+    max-width: 250px;
+    height: 42px;
     box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 0 12px 0 10px;
-    border-radius: 999px;
-    background: var(--bg-1, #1c1e24);
-    color: var(--text-1, #f1f2f5);
-    border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
-    font-size: 12px;
-    line-height: 1;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-content: center;
+    column-gap: 7px;
+    row-gap: 2px;
+    padding: 0 13px 0 11px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04)), rgba(22, 24, 32, 0.46);
+    border: 1px solid rgba(255, 255, 255, 0.26);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.28),
+        0 6px 18px rgba(0, 0, 0, 0.28);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    backdrop-filter: blur(14px) saturate(1.4);
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
     white-space: nowrap;
     transform-origin: 50% 100%;
     transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -62,53 +70,76 @@
 }
 
 .saba-pet-dot {
-    flex: none;
+    grid-row: 1;
+    align-self: center;
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #9aa0aa;
+    background: rgba(255, 255, 255, 0.6);
 }
 
 .saba-pet-bubble[data-state='done'] .saba-pet-dot {
-    background: #3fbf6f;
-    box-shadow: 0 0 0 3px rgba(63, 191, 111, 0.18);
+    background: #4ade80;
+    box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.22);
 }
 
 .saba-pet-bubble[data-state='failed'] .saba-pet-dot {
-    background: #e5534b;
-    box-shadow: 0 0 0 3px rgba(229, 83, 75, 0.18);
+    background: #f87171;
+    box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.22);
 }
 
 .saba-pet-bubble[data-state='working'] .saba-pet-dot {
     animation: saba-pet-blink 1.1s ease-in-out infinite;
 }
 
-.saba-pet-text {
+.saba-pet-line {
+    grid-row: 1;
+    grid-column: 2;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    font-size: 12.5px;
     line-height: 1.3;
+}
+
+.saba-pet-text {
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 600;
 }
 
 .saba-pet-bubble[data-state='working'] .saba-pet-text {
     background: linear-gradient(
             90deg,
-            var(--text-3, #8b909a) 0%,
-            var(--text-3, #8b909a) 30%,
-            var(--text-1, #f1f2f5) 50%,
-            var(--text-3, #8b909a) 70%,
-            var(--text-3, #8b909a) 100%
+            rgba(255, 255, 255, 0.5) 0%,
+            rgba(255, 255, 255, 0.5) 30%,
+            #fff 50%,
+            rgba(255, 255, 255, 0.5) 70%,
+            rgba(255, 255, 255, 0.5) 100%
         )
         0 0 / 300% 100%;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    text-shadow: none;
     animation: saba-pet-shimmer 3.2s ease-in-out infinite;
 }
 
 .saba-pet-by {
     flex: none;
-    color: var(--text-3, #8b909a);
-    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 11.5px;
+}
+
+.saba-pet-meta {
+    grid-row: 2;
+    grid-column: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 10.5px;
+    line-height: 1.2;
 }
 
 @keyframes saba-pet-pop {

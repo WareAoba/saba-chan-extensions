@@ -116,7 +116,7 @@ var module = { exports: {} };
             nextSweep: t0 + SWEEP_AFTER + between(random, SWEEP_GAP),
             nextBlink: t0 + between(random, BLINK_GAP),
             lastHover: -Infinity,
-            bubbles: [], // 작업마다 하나, 말한 순서: {id, key, vars, state, until, during}
+            bubbles: [], // 작업마다 하나, 말한 순서: {id, key, vars, state, at, until, during}
         };
 
         function any(map) {
@@ -143,6 +143,7 @@ var module = { exports: {} };
                 key: key,
                 vars: vars || {},
                 state: state,
+                at: t,
                 until: during ? Infinity : t + (state === 'failed' ? BUBBLE_LONG_MS : BUBBLE_MS),
                 during: during || null,
             });
@@ -212,7 +213,10 @@ var module = { exports: {} };
             data = data || {};
             var id = data.instanceId;
             var name = data.instance || '';
-            var who = data.userName ? { user: data.userName } : { source: data.source };
+            // 시킨 쪽: 출처, 이름(디스코드 표시 이름·원격 PC 이름), 장소(디스코드 서버 이름)
+            var who = { source: data.source };
+            if (data.userName) who.user = data.userName;
+            if (data.guildName) who.place = data.guildName;
             var remote = REMOTE_SOURCES.indexOf(data.source) >= 0;
             switch (type) {
                 case 'instance.started':
@@ -342,7 +346,7 @@ var module = { exports: {} };
                     return (x.state === 'working' ? 1 : 0) - (y.state === 'working' ? 1 : 0);
                 })
                 .map(function (x) {
-                    return { id: x.id, key: x.key, vars: x.vars, state: x.state };
+                    return { id: x.id, key: x.key, vars: x.vars, state: x.state, at: x.at };
                 });
             if (st.once) return { scene: st.once.scene, at: st.once.at, bubbles: b };
             return { scene: st.base, at: st.baseAt, bubbles: b };
@@ -381,18 +385,34 @@ var CELL_W = 192;
 var CELL_H = 208;
 var SCALE = 2 / 3;
 /** 말풍선 높이와, 여러 개를 겹쳐 쌓을 때 뒤 말풍선이 삐져나오는 거리·줄어드는 비율 (pet.css와 맞춘다) */
-var BUBBLE_H = 26;
+var BUBBLE_H = 42;
 var BUBBLE_STEP = 6;
 var BUBBLE_SHRINK = 0.06;
 /** 칸이 바뀌지 않아도 이만큼에 한 번은 상태 기계를 돌린다 (시간으로 바뀌는 잠·빗자루질·말풍선) */
 var TICK_MS = 250;
 
-/** 말풍선: 할 일·한 일의 짧은 요약과, 밖에서 시켰으면 시킨 쪽(사용자 이름, 없으면 출처 이름) */
+/** 말한 시각 (시스템 시간 형식) */
+function clock(at) {
+    try {
+        return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (_e) {
+        return '';
+    }
+}
+
+/**
+ * 말풍선 두 줄. 첫 줄: 한 일(선명)과 시킨 사람(흐림, 이름이 없으면 출처).
+ * 둘째 줄(작고 흐림): 시각, 이름이 있으면 출처, 장소(디스코드 서버 이름)
+ */
 function Bubble(props) {
     var t = props.t;
     var bubble = props.bubble;
     var who = bubble.vars.who;
-    var by = who ? who.user || t('source.' + (who.source || 'external'), { defaultValue: who.source || '' }) : '';
+    var source = who ? t('source.' + (who.source || 'external'), { defaultValue: who.source || '' }) : '';
+    var by = who ? who.user || source : '';
+    var meta = [clock(bubble.at)];
+    if (who && who.user && source) meta.push(source);
+    if (who && who.place) meta.push(who.place);
     return h(
         'div',
         {
@@ -406,8 +426,17 @@ function Bubble(props) {
             },
         },
         h('span', { className: 'saba-pet-dot', 'aria-hidden': true }),
-        h('span', { className: 'saba-pet-text' }, t(bubble.key, bubble.vars)),
-        by ? h('span', { className: 'saba-pet-by' }, by) : null,
+        h(
+            'span',
+            { className: 'saba-pet-line' },
+            h('span', { className: 'saba-pet-text' }, t(bubble.key, bubble.vars)),
+            by ? h('span', { className: 'saba-pet-by' }, by) : null,
+        ),
+        h(
+            'span',
+            { className: 'saba-pet-meta' },
+            meta.filter(Boolean).join(' · '),
+        ),
     );
 }
 
