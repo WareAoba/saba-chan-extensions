@@ -129,6 +129,7 @@
         /**
          * 말풍선: 대사가 아니라 할 일·한 일의 짧은 요약. 작업(id)마다 하나를 두고 같은 작업은 제자리에서 바뀐다.
          * state는 done(마친 일)·working(하는 중·할 일)·failed. during([표, 키])을 주면 그 일(수리·요리)이 이어지는 동안 남는다.
+         * from은 하는 중인 일이 떠나는 상태(점 색): stopped(회색)·running(초록)·recovering(노랑, 잠깐 끊김) — 앱 전체 규칙.
          * target은 누르면 열 앱 화면: 서버(`server:<id>`), 설치한 서버 이름(`provision:<이름>`, 화면이 id를 찾는다), 설정(`settings`)
          */
         function targetOf(id) {
@@ -140,7 +141,7 @@
             return rest ? 'server:' + rest : null;
         }
 
-        function say(id, key, vars, state, during) {
+        function say(id, key, vars, state, during, from) {
             var t = now();
             st.bubbles = st.bubbles.filter(function (b) {
                 return b.id !== id;
@@ -154,6 +155,7 @@
                 until: during || state === 'failed' || STICKY_KEYS.indexOf(key) >= 0 ? Infinity : t + BUBBLE_MS,
                 during: during || null,
                 target: targetOf(id),
+                from: state === 'working' ? from || 'stopped' : null,
             });
             // 넘치면 끝난 일 중 오래된 것부터 뺀다 (하는 중인 일은 끝날 때까지 둔다)
             while (st.bubbles.length > MAX_BUBBLES) {
@@ -252,7 +254,7 @@
                     st.once = null;
                     if (typeof data.restartInSecs === 'number') {
                         st.repairing[id] = now() + data.restartInSecs * 1000 + REPAIR_GRACE;
-                        say('srv:' + id, 'bubble.restarting', { server: name }, 'working', ['repairing', id]);
+                        say('srv:' + id, 'bubble.restarting', { server: name }, 'working', ['repairing', id], 'recovering');
                     } else {
                         st.collapsed[id] = true;
                         say('srv:' + id, data.kind === 'start_failed' ? 'bubble.start_failed' : 'bubble.crash', { server: name }, 'failed');
@@ -290,7 +292,7 @@
                         }
                     } else {
                         st.cooking[key] = now();
-                        say('prov:' + key, 'bubble.installing', { server: key }, 'working', ['cooking', key]);
+                        say('prov:' + key, 'bubble.installing', { server: key }, 'working', ['cooking', key], 'stopped');
                     }
                     break;
                 }
@@ -306,7 +308,7 @@
                     say('schedule:' + id, 'bubble.schedule_' + (['restart', 'stop', 'update'].indexOf(data.action) >= 0 ? data.action : 'other'), {
                         server: name,
                         minutes: data.minutesLeft,
-                    }, 'working');
+                    }, 'working', null, 'running');
                     play('think');
                     break;
                 case 'update.available':
@@ -360,7 +362,7 @@
                     return (x.state === 'working' ? 1 : 0) - (y.state === 'working' ? 1 : 0);
                 })
                 .map(function (x) {
-                    return { id: x.id, key: x.key, vars: x.vars, state: x.state, at: x.at, target: x.target };
+                    return { id: x.id, key: x.key, vars: x.vars, state: x.state, at: x.at, target: x.target, from: x.from };
                 });
             if (st.once) return { scene: st.once.scene, at: st.once.at, bubbles: b };
             return { scene: st.base, at: st.baseAt, bubbles: b };

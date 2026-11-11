@@ -125,6 +125,7 @@ function Bubble(props) {
             ref: ref,
             className: 'saba-pet-bubble',
             'data-state': bubble.state,
+            'data-from': bubble.from || undefined,
             'data-behind': front ? undefined : 'true',
             'data-leaving': props.leaving ? (props.index === 0 ? 'front' : 'back') : undefined,
             'aria-hidden': front ? undefined : true,

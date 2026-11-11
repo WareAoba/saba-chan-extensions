@@ -194,6 +194,15 @@ html[data-theme='light'] .saba-pet {
         saba-pet-ripple-failed 0.9s ease-out;
 }
 
+/* 하는 중인 일의 점은 떠나는 상태의 색으로 깜빡인다 (앱 전체 규칙): 정지에서 = 회색, 켜진 것에서 = 초록, 복구 중 = 노랑 */
+.saba-pet-bubble[data-from='running'] .saba-pet-dot {
+    background: #4ade80;
+}
+
+.saba-pet-bubble[data-from='recovering'] .saba-pet-dot {
+    background: #facc15;
+}
+
 .saba-pet-bubble[data-state='working'] .saba-pet-dot {
     animation:
         saba-pet-dot-in 0.45s ease-out,
