@@ -21,9 +21,9 @@
 
 | 익스텐션 (id) | 버전 | 하는 일 | 쓰는 모듈 |
 |---|---|---|---|
-| [steamcmd](steamcmd/) (`steamcmd`) | 0.1.7 | SteamCMD로 게임 서버를 설치하고 업데이트해요 | Palworld, Project Zomboid |
-| [ue4_ini](ue4_ini/) (`ue4-ini`) | 0.1.8 | 언리얼 엔진 4 INI 파일의 `OptionSettings`를 읽고 써요 | Palworld |
-| [xna](xna/) (`xna`) | 0.1.1 | Microsoft XNA Framework 4.0 Refresh를 PC에 설치하지 않고 게임 서버 옆에 둬요 | Terraria (Windows 서버) |
+| [steamcmd](steamcmd/) (`steamcmd`) | 0.1.8 | SteamCMD로 게임 서버를 설치하고 업데이트해요 | Palworld, Project Zomboid |
+| [ue4_ini](ue4_ini/) (`ue4-ini`) | 0.1.9 | 언리얼 엔진 4 INI 파일의 `OptionSettings`를 읽고 써요 | Palworld |
+| [xna](xna/) (`xna`) | 0.1.2 | Microsoft XNA Framework 4.0 Refresh를 PC에 설치하지 않고 게임 서버 옆에 둬요 | Terraria (Windows 서버) |
 | [desktop_pet](desktop_pet/) (`desktop-pet`) | 0.1.0 | 바탕화면 구석에 서버 일에 반응하는 작은 사바쨩을 띄워요 (앱의 바탕화면 오버레이 창, Python 코드 없음) | 없음 |
 
 버전은 각 폴더의 `manifest.json` `version`이 기준이에요. `steamcmd`·`xna`는 사바 코어(데몬) 0.1.11 이상에서 돌아가요.
@@ -60,8 +60,8 @@
 
 ## English
 
-Extensions for [Saba-chan](https://saba-chan.online): features that only some games need, kept separate and turned on when needed. `steamcmd` 0.1.7 installs and updates servers through SteamCMD (Palworld, Project Zomboid), `ue4-ini` 0.1.8 edits Unreal Engine 4 INI settings (Palworld), and `xna` 0.1.1 places a pinned XNA Framework 4.0 next to a Windows Terraria server without installing it system-wide. Installing a module also installs and turns on the extensions it needs; you can also manage them in the Extensions tab of Saba Storage or with `saba-chan-cli extension install|enable|disable <id>`. Each one is a `manifest.json` plus Python code that the daemon calls at hook points or that modules import, optionally with a `gui/` bundle the app slots into its screens. The contract is in [03-extensions.md](https://github.com/WareAoba/saba-chan/blob/main/docs/architecture/03-extensions.md) (Korean). Run tests with `pytest`. Extensions ship with each Saba-chan app release: bump `version` in `manifest.json`, merge to `main`, and the app's release workflow packs and signs them.
+Extensions for [Saba-chan](https://saba-chan.online): features that only some games need, kept separate and turned on when needed. `steamcmd` 0.1.8 installs and updates servers through SteamCMD (Palworld, Project Zomboid), `ue4-ini` 0.1.9 edits Unreal Engine 4 INI settings (Palworld), and `xna` 0.1.2 places a pinned XNA Framework 4.0 next to a Windows Terraria server without installing it system-wide. Installing a module also installs and turns on the extensions it needs; you can also manage them in the Extensions tab of Saba Storage or with `saba-chan-cli extension install|enable|disable <id>`. Each one is a `manifest.json` plus Python code that the daemon calls at hook points or that modules import, optionally with a `gui/` bundle the app slots into its screens. The contract is in [03-extensions.md](https://github.com/WareAoba/saba-chan/blob/main/docs/architecture/03-extensions.md) (Korean). Run tests with `pytest`. Extensions ship with each Saba-chan app release: bump `version` in `manifest.json`, merge to `main`, and the app's release workflow packs and signs them.
 
 ## 日本語
 
-[サバちゃん](https://saba-chan.online)の拡張機能です。一部のゲームだけが必要とする機能をここに分けて置き、必要なものだけオンにして使います。`steamcmd` 0.1.7 は SteamCMD でサーバーをインストール・更新し(Palworld、Project Zomboid)、`ue4-ini` 0.1.8 は Unreal Engine 4 の INI 設定を読み書きし(Palworld)、`xna` 0.1.1 は XNA Framework 4.0 を PC にインストールせず Windows の Terraria サーバーの隣に置きます。モジュールを入れると、そのモジュールが使う拡張機能も一緒に入ってオンになります。サバ ストレージの拡張機能タブや `saba-chan-cli extension install|enable|disable <id>` でも管理できます。それぞれ `manifest.json` と、デーモンが hook のタイミングで呼んだりモジュールが import したりする Python コードでできていて、画面を持つものはアプリが決まった場所(slot)に `gui/` のバンドルを差し込みます。約束ごとは [03-extensions.md](https://github.com/WareAoba/saba-chan/blob/main/docs/architecture/03-extensions.md)(韓国語)にあります。テストは `pytest` で回します。拡張機能はサバちゃんアプリのリリースと一緒に配布されます。`manifest.json` の `version` を上げて `main` にマージすると、アプリのリリースワークフローがまとめて署名します。
+[サバちゃん](https://saba-chan.online)の拡張機能です。一部のゲームだけが必要とする機能をここに分けて置き、必要なものだけオンにして使います。`steamcmd` 0.1.8 は SteamCMD でサーバーをインストール・更新し(Palworld、Project Zomboid)、`ue4-ini` 0.1.9 は Unreal Engine 4 の INI 設定を読み書きし(Palworld)、`xna` 0.1.2 は XNA Framework 4.0 を PC にインストールせず Windows の Terraria サーバーの隣に置きます。モジュールを入れると、そのモジュールが使う拡張機能も一緒に入ってオンになります。サバ ストレージの拡張機能タブや `saba-chan-cli extension install|enable|disable <id>` でも管理できます。それぞれ `manifest.json` と、デーモンが hook のタイミングで呼んだりモジュールが import したりする Python コードでできていて、画面を持つものはアプリが決まった場所(slot)に `gui/` のバンドルを差し込みます。約束ごとは [03-extensions.md](https://github.com/WareAoba/saba-chan/blob/main/docs/architecture/03-extensions.md)(韓国語)にあります。テストは `pytest` で回します。拡張機能はサバちゃんアプリのリリースと一緒に配布されます。`manifest.json` の `version` を上げて `main` にマージすると、アプリのリリースワークフローがまとめて署名します。
