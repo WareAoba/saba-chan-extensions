@@ -74,7 +74,7 @@ def test_the_committed_bundle_is_up_to_date():
 
 def run_node(script: str):
     prelude = f"const M = require({json.dumps(str(GUI / 'src' / 'machine.js'))});\n"
-    out = subprocess.run([NODE, "-e", prelude + textwrap.dedent(script)], capture_output=True, text=True, timeout=60)
+    out = subprocess.run([NODE, "-e", prelude + textwrap.dedent(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
 
