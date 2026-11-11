@@ -13,10 +13,47 @@
     flex: none;
 }
 
-/* 말풍선: 앱 테마와 상관없는 반투명 유리. 두 줄: 한 일(선명)·시킨 사람(흐림) / 시각·출처·장소(작고 흐림).
+/* 말풍선 색: 앱 테마를 따라 어두우면 검은 유리, 밝으면 흰 유리 */
+.saba-pet {
+    --pb-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0)), rgba(10, 11, 15, 0.7);
+    --pb-border: rgba(255, 255, 255, 0.2);
+    --pb-hi: rgba(255, 255, 255, 0.18);
+    --pb-fg: #fff;
+    --pb-dim: rgba(255, 255, 255, 0.6);
+    --pb-faint: rgba(255, 255, 255, 0.5);
+    --pb-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+    --pb-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme='light'] .saba-pet {
+    --pb-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.1)), rgba(250, 251, 253, 0.74);
+    --pb-border: rgba(255, 255, 255, 0.85);
+    --pb-hi: rgba(255, 255, 255, 0.9);
+    --pb-fg: #14161b;
+    --pb-dim: rgba(20, 22, 27, 0.58);
+    --pb-faint: rgba(20, 22, 27, 0.4);
+    --pb-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    --pb-text-shadow: none;
+}
+
+@media (prefers-color-scheme: light) {
+    html[data-theme='auto'] .saba-pet,
+    html:not([data-theme]) .saba-pet {
+        --pb-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.1)), rgba(250, 251, 253, 0.74);
+        --pb-border: rgba(255, 255, 255, 0.85);
+        --pb-hi: rgba(255, 255, 255, 0.9);
+        --pb-fg: #14161b;
+        --pb-dim: rgba(20, 22, 27, 0.58);
+        --pb-faint: rgba(20, 22, 27, 0.4);
+        --pb-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+        --pb-text-shadow: none;
+    }
+}
+
+/* 말풍선: 반투명 유리 알약. 두 줄: 한 일(선명)·시킨 사람(흐림) / 시각·출처·장소(작고 흐림).
    마친 일은 초록 점, 하는 중·할 일은 깜빡이는 회색 점과 글자 위를 지나가는 빛, 실패는 빨간 점.
    여러 작업이면 맨 앞(끝난 일 먼저)만 글자를 보이고 뒤 말풍선은 아래로 조금씩 삐져나오게 겹친다.
-   바탕화면은 웹 화면 밖이라 흐리게 비치지 않는다: 어두운 반투명 바탕과 빛 테두리로 유리를 낸다.
+   바탕화면은 웹 화면 밖이라 흐리게 비치지 않는다: 반투명 바탕과 빛 테두리로 유리를 낸다.
    높이 42px, 6px씩, 6%씩 작게 (pet.js) */
 .saba-pet-bubbles {
     position: relative;
@@ -36,17 +73,17 @@
     align-content: center;
     column-gap: 7px;
     row-gap: 2px;
-    padding: 0 13px 0 11px;
-    border-radius: 14px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04)), rgba(22, 24, 32, 0.46);
-    border: 1px solid rgba(255, 255, 255, 0.26);
+    padding: 0 18px 0 14px;
+    border-radius: 999px;
+    background: var(--pb-bg);
+    border: 1px solid var(--pb-border);
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.28),
-        0 6px 18px rgba(0, 0, 0, 0.28);
+        inset 0 1px 0 var(--pb-hi),
+        var(--pb-shadow);
     -webkit-backdrop-filter: blur(14px) saturate(1.4);
     backdrop-filter: blur(14px) saturate(1.4);
-    color: #fff;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    color: var(--pb-fg);
+    text-shadow: var(--pb-text-shadow);
     white-space: nowrap;
     transform-origin: 50% 100%;
     transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -75,7 +112,7 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.6);
+    background: var(--pb-dim);
 }
 
 .saba-pet-bubble[data-state='done'] .saba-pet-dot {
@@ -112,11 +149,11 @@
 .saba-pet-bubble[data-state='working'] .saba-pet-text {
     background: linear-gradient(
             90deg,
-            rgba(255, 255, 255, 0.5) 0%,
-            rgba(255, 255, 255, 0.5) 30%,
-            #fff 50%,
-            rgba(255, 255, 255, 0.5) 70%,
-            rgba(255, 255, 255, 0.5) 100%
+            var(--pb-faint) 0%,
+            var(--pb-faint) 30%,
+            var(--pb-fg) 50%,
+            var(--pb-faint) 70%,
+            var(--pb-faint) 100%
         )
         0 0 / 300% 100%;
     -webkit-background-clip: text;
@@ -128,7 +165,7 @@
 
 .saba-pet-by {
     flex: none;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--pb-dim);
     font-size: 11.5px;
 }
 
@@ -137,7 +174,7 @@
     grid-column: 2;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--pb-dim);
     font-size: 10.5px;
     line-height: 1.2;
 }
