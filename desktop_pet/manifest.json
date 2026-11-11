@@ -16,7 +16,7 @@
     "fr": "Place une petite Saba-chan dans un coin du bureau qui réagit à vos serveurs"
   },
   "author": "WareAoba",
-  "min_app_version": "0.1.13",
+  "min_app_version": "0.1.14",
   "dependencies": {},
   "permissions": {},
   "gui": {
