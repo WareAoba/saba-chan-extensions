@@ -1,0 +1,31 @@
+{
+  "source": {
+    "discord": "Discord",
+    "web": "Saba-chan 网页",
+    "remote": "远程电脑",
+    "mcp": "AI 代理",
+    "chatbot": "会说话的 Saba-chan",
+    "schedule": "计划任务",
+    "external": "外部程序"
+  },
+  "bubble": {
+    "started": "{{server}} 已启动",
+    "stopped": "{{server}} 已停止",
+    "not_ready": "{{server}} 未就绪",
+    "restarting": "正在重启 {{server}}",
+    "crash": "{{server}} 已崩溃",
+    "start_failed": "{{server}} 启动失败",
+    "restarted": "{{server}} 已重启",
+    "restart_failed": "{{server}} 重启失败",
+    "installing": "正在安装 {{server}}",
+    "provision_done": "{{server}} 安装完成",
+    "provision_failed": "{{server}} 安装失败",
+    "backup_failed": "{{server}} 备份失败",
+    "schedule_restart": "{{minutes}} 分钟后重启 {{server}}",
+    "schedule_stop": "{{minutes}} 分钟后停止 {{server}}",
+    "schedule_update": "{{minutes}} 分钟后更新 {{server}}",
+    "schedule_other": "{{minutes}} 分钟后 {{server}} 计划任务",
+    "update_available": "有新更新"
+  },
+  "close": "关闭"
+}

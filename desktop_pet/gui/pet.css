@@ -1,0 +1,346 @@
+/* 데스크톱 펫 (gui/src/pet.js). 창은 투명하고 펫과 말풍선만 보인다. 색은 앱 테마 변수를 따른다 */
+
+.saba-pet {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 8px 0;
+}
+
+.saba-pet-sprite {
+    background-repeat: no-repeat;
+    image-rendering: auto;
+    flex: none;
+}
+
+/* 말풍선 색: 앱 테마를 따라 어두우면 검은 유리, 밝으면 흰 유리 */
+.saba-pet {
+    --pb-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0)), rgba(10, 11, 15, 0.7);
+    --pb-border: rgba(255, 255, 255, 0.2);
+    --pb-hi: rgba(255, 255, 255, 0.18);
+    --pb-fg: #fff;
+    --pb-dim: rgba(255, 255, 255, 0.6);
+    --pb-faint: rgba(255, 255, 255, 0.5);
+    --pb-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+    --pb-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --pb-solid-bg: #0a0b0f;
+}
+
+html[data-theme='light'] .saba-pet {
+    --pb-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.1)), rgba(250, 251, 253, 0.74);
+    --pb-border: rgba(255, 255, 255, 0.85);
+    --pb-hi: rgba(255, 255, 255, 0.9);
+    --pb-fg: #14161b;
+    --pb-dim: rgba(20, 22, 27, 0.58);
+    --pb-faint: rgba(20, 22, 27, 0.4);
+    --pb-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    --pb-text-shadow: none;
+    --pb-solid-bg: #fff;
+}
+
+@media (prefers-color-scheme: light) {
+    html[data-theme='auto'] .saba-pet,
+    html:not([data-theme]) .saba-pet {
+        --pb-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.1)), rgba(250, 251, 253, 0.74);
+        --pb-border: rgba(255, 255, 255, 0.85);
+        --pb-hi: rgba(255, 255, 255, 0.9);
+        --pb-fg: #14161b;
+        --pb-dim: rgba(20, 22, 27, 0.58);
+        --pb-faint: rgba(20, 22, 27, 0.4);
+        --pb-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+        --pb-text-shadow: none;
+        --pb-solid-bg: #fff;
+    }
+}
+
+/* 말풍선: 반투명 유리 알약. 두 줄: 한 일(선명)·시킨 사람(흐림) / 시각·출처·장소(작고 흐림).
+   마친 일은 초록 점, 하는 중·할 일은 깜빡이는 회색 점과 글자 위를 지나가는 빛, 실패는 빨간 점.
+   여러 작업이면 맨 앞(끝난 일 먼저)만 글자를 보이고 뒤 말풍선은 아래로 조금씩 삐져나오게 겹친다.
+   바탕화면은 웹 화면 밖이라 흐리게 비치지 않는다: 반투명 바탕과 빛 테두리로 유리를 낸다.
+   높이 42px, 6px씩, 6%씩 작게 (pet.js) */
+.saba-pet-bubbles {
+    position: relative;
+    width: fit-content;
+    max-width: 250px;
+    margin-bottom: 6px;
+}
+
+.saba-pet-bubble {
+    position: relative;
+    max-width: 250px;
+    height: 42px;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-content: center;
+    column-gap: 7px;
+    row-gap: 2px;
+    padding: 0 18px 0 14px;
+    border-radius: 999px;
+    background: var(--pb-bg);
+    border: 1px solid var(--pb-border);
+    box-shadow:
+        inset 0 1px 0 var(--pb-hi),
+        var(--pb-shadow);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    backdrop-filter: blur(14px) saturate(1.4);
+    color: var(--pb-fg);
+    text-shadow: var(--pb-text-shadow);
+    white-space: nowrap;
+    transform-origin: 50% 100%;
+    /* 자리를 바꿀 때 튕기듯 미끄러진다 */
+    transition: transform 0.55s cubic-bezier(0.34, 1.45, 0.64, 1);
+    animation: saba-pet-pop 0.55s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* 사라지는 말풍선: 맨 앞은 위로 흩어지고, 뒤는 그 자리에서 옅어진다 */
+.saba-pet-bubble[data-leaving] {
+    pointer-events: none;
+    animation: saba-pet-leave-back 0.42s ease-in forwards;
+}
+
+.saba-pet-bubble[data-leaving='front'] {
+    animation-name: saba-pet-leave;
+}
+
+.saba-pet-bubble > * {
+    transition: opacity 0.3s ease;
+}
+
+/* 내용이 바뀌면 새 글자가 아래에서 떠오른다 (둘째 줄은 조금 늦게) */
+.saba-pet-line {
+    animation: saba-pet-swap 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.saba-pet-meta {
+    animation: saba-pet-swap 0.45s 0.07s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* 뒤 말풍선은 맨 앞 말풍선 너비에 맞춘다 */
+.saba-pet-bubble[data-behind] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+}
+
+.saba-pet-bubble[data-behind] > * {
+    opacity: 0;
+}
+
+/* 맨 앞 말풍선: 누르면 앱의 그 화면으로. 올리면 오른쪽 위에 닫기 버튼 */
+.saba-pet-bubble:not([data-behind]) {
+    cursor: pointer;
+}
+
+.saba-pet-close {
+    position: absolute;
+    /* 펫 창(.saba-pet 위 4px·옆 8px 여백) 밖으로 나가 잘리지 않게 */
+    top: -3px;
+    right: -3px;
+    width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--pb-border);
+    background: var(--pb-bg);
+    color: var(--pb-fg);
+    box-shadow: var(--pb-shadow);
+    cursor: pointer;
+    opacity: 0;
+    scale: 0.7;
+    transition:
+        opacity 0.18s ease,
+        scale 0.18s ease;
+}
+
+.saba-pet-bubble:hover .saba-pet-close,
+.saba-pet-close:focus-visible {
+    opacity: 1;
+    scale: 1;
+}
+
+.saba-pet-close:hover {
+    background: var(--pb-fg);
+    color: var(--pb-solid-bg, #000);
+}
+
+.saba-pet-dot {
+    animation: saba-pet-dot-in 0.45s ease-out;
+    grid-row: 1;
+    align-self: center;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--pb-dim);
+}
+
+.saba-pet-bubble[data-state='done'] .saba-pet-dot {
+    background: #4ade80;
+    box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.22);
+    animation:
+        saba-pet-dot-in 0.45s ease-out,
+        saba-pet-ripple-done 0.9s ease-out;
+}
+
+.saba-pet-bubble[data-state='failed'] .saba-pet-dot {
+    background: #f87171;
+    box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.22);
+    animation:
+        saba-pet-dot-in 0.45s ease-out,
+        saba-pet-ripple-failed 0.9s ease-out;
+}
+
+/* 하는 중인 일의 점은 떠나는 상태의 색으로 깜빡인다 (앱 전체 규칙): 정지에서 = 회색, 켜진 것에서 = 초록, 복구 중 = 노랑 */
+.saba-pet-bubble[data-from='running'] .saba-pet-dot {
+    background: #4ade80;
+}
+
+.saba-pet-bubble[data-from='recovering'] .saba-pet-dot {
+    background: #facc15;
+}
+
+.saba-pet-bubble[data-state='working'] .saba-pet-dot {
+    animation:
+        saba-pet-dot-in 0.45s ease-out,
+        saba-pet-blink 1.1s 0.45s ease-in-out infinite;
+}
+
+.saba-pet-line {
+    grid-row: 1;
+    grid-column: 2;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    font-size: 12.5px;
+    line-height: 1.3;
+}
+
+.saba-pet-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 600;
+}
+
+.saba-pet-bubble[data-state='working'] .saba-pet-text {
+    background: linear-gradient(
+            90deg,
+            var(--pb-faint) 0%,
+            var(--pb-faint) 30%,
+            var(--pb-fg) 50%,
+            var(--pb-faint) 70%,
+            var(--pb-faint) 100%
+        )
+        0 0 / 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: none;
+    animation: saba-pet-shimmer 3.2s ease-in-out infinite;
+}
+
+.saba-pet-by {
+    flex: none;
+    color: var(--pb-dim);
+    font-size: 11.5px;
+}
+
+.saba-pet-meta {
+    grid-row: 2;
+    grid-column: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--pb-dim);
+    font-size: 10.5px;
+    line-height: 1.2;
+}
+
+@keyframes saba-pet-pop {
+    from {
+        opacity: 0;
+        translate: 0 14px;
+        scale: 0.7;
+        filter: blur(6px);
+    }
+    60% {
+        opacity: 1;
+        filter: blur(0);
+    }
+}
+
+@keyframes saba-pet-leave {
+    to {
+        opacity: 0;
+        translate: 0 -18px;
+        scale: 0.85;
+        filter: blur(6px);
+    }
+}
+
+@keyframes saba-pet-leave-back {
+    to {
+        opacity: 0;
+        scale: 0.9;
+    }
+}
+
+@keyframes saba-pet-swap {
+    from {
+        opacity: 0;
+        translate: 0 8px;
+        filter: blur(3px);
+    }
+}
+
+@keyframes saba-pet-dot-in {
+    from {
+        opacity: 0;
+    }
+}
+
+@keyframes saba-pet-ripple-done {
+    from {
+        box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+    }
+    to {
+        box-shadow: 0 0 0 12px rgba(74, 222, 128, 0);
+    }
+}
+
+@keyframes saba-pet-ripple-failed {
+    from {
+        box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.7);
+    }
+    to {
+        box-shadow: 0 0 0 12px rgba(248, 113, 113, 0);
+    }
+}
+
+@keyframes saba-pet-blink {
+    50% {
+        opacity: 0.25;
+    }
+}
+
+@keyframes saba-pet-shimmer {
+    from {
+        background-position: 100% 0;
+    }
+    to {
+        background-position: 0% 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .saba-pet-bubble,
+    .saba-pet-bubble *,
+    .saba-pet-bubble[data-state] .saba-pet-dot,
+    .saba-pet-bubble[data-state='working'] .saba-pet-text {
+        animation: none;
+        transition: none;
+    }
+}

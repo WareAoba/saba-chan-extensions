@@ -24,6 +24,7 @@
 | [steamcmd](steamcmd/) (`steamcmd`) | 0.1.7 | SteamCMD로 게임 서버를 설치하고 업데이트해요 | Palworld, Project Zomboid |
 | [ue4_ini](ue4_ini/) (`ue4-ini`) | 0.1.8 | 언리얼 엔진 4 INI 파일의 `OptionSettings`를 읽고 써요 | Palworld |
 | [xna](xna/) (`xna`) | 0.1.1 | Microsoft XNA Framework 4.0 Refresh를 PC에 설치하지 않고 게임 서버 옆에 둬요 | Terraria (Windows 서버) |
+| [desktop_pet](desktop_pet/) (`desktop-pet`) | 0.1.0 | 바탕화면 구석에 서버 일에 반응하는 작은 사바쨩을 띄워요 (앱의 바탕화면 오버레이 창, Python 코드 없음) | 없음 |
 
 버전은 각 폴더의 `manifest.json` `version`이 기준이에요. `steamcmd`·`xna`는 사바 코어(데몬) 0.1.11 이상에서 돌아가요.
 
@@ -44,6 +45,8 @@
   <이름>.py        hook 때 데몬이 부르거나 모듈이 가져다 쓰는 Python 코드
   gui/            (있으면) 앱 화면에 끼워 넣을 UMD 번들
 ```
+
+`desktop_pet`의 번들(`gui/dist/desktop-pet.js`)은 `gui/src`와 `gui/sprites`를 `python desktop_pet/gui/build.py`로 묶은 것이에요. 고치면 다시 묶어서 함께 커밋해요(시험이 어긋남을 잡아요).
 
 익스텐션은 두 가지로 쓰여요. 데몬이 정해진 시점(hook)에 함수를 부르기도 하고, 모듈이 `import extensions.steamcmd`처럼 가져다 쓰기도 해요. 화면이 있는 익스텐션은 앱이 정해진 자리(slot)에 그 화면을 끼워 넣고요. 자세한 계약은 사바쨩 저장소의 [03-extensions.md](https://github.com/WareAoba/saba-chan/blob/main/docs/architecture/03-extensions.md)에 있어요.
 

@@ -1,0 +1,31 @@
+{
+  "source": {
+    "discord": "Discord",
+    "web": "Saba-chan Web",
+    "remote": "a remote PC",
+    "mcp": "an AI agent",
+    "chatbot": "Talking Saba-chan",
+    "schedule": "a schedule",
+    "external": "another program"
+  },
+  "bubble": {
+    "started": "{{server}} started",
+    "stopped": "{{server}} stopped",
+    "not_ready": "{{server}} not ready",
+    "restarting": "Restarting {{server}}",
+    "crash": "{{server}} crashed",
+    "start_failed": "{{server}} failed to start",
+    "restarted": "{{server}} restarted",
+    "restart_failed": "{{server}} restart failed",
+    "installing": "Installing {{server}}",
+    "provision_done": "{{server}} installed",
+    "provision_failed": "{{server}} install failed",
+    "backup_failed": "{{server}} backup failed",
+    "schedule_restart": "Restart {{server}} in {{minutes}} min",
+    "schedule_stop": "Stop {{server}} in {{minutes}} min",
+    "schedule_update": "Update {{server}} in {{minutes}} min",
+    "schedule_other": "{{server}} task in {{minutes}} min",
+    "update_available": "Update available"
+  },
+  "close": "Close"
+}
