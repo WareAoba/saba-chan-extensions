@@ -545,13 +545,13 @@ function Bubble(props) {
                       className: 'saba-pet-close',
                       'aria-label': t('close'),
                       title: t('close'),
-                      // 끌기·앱 열기로 번지지 않게
+                      // 끌기·앱 열기로 번지지 않게. 닫기는 click으로: 마우스와 키보드(Enter·Space) 모두
                       onPointerDown: stop,
-                      onPointerUp: function (e) {
+                      onPointerUp: stop,
+                      onClick: function (e) {
                           e.stopPropagation();
-                          if (e.button === 0) props.onClose(bubble.id);
+                          props.onClose(bubble.id);
                       },
-                      onClick: stop,
                   },
                   h(
                       'svg',
