@@ -1171,3 +1171,31 @@ def test_check_update_failure_is_in_the_app_language(tmp_path, korean):
     with patch.object(type(steam), "available", new_callable=lambda: property(lambda self: False)):
         result = steam.check_update(app_id=2394010, install_dir=str(tmp_path))
     assert result["error"] == "SteamCMD를 쓸 수 없습니다"
+
+
+def test_install_walks_a_slow_folder_less_often(fake_steamcmd, monkeypatch):
+    """폴더 훑기가 오래 걸리면(파일 수만 개, HDD) 받기와 디스크를 다투지 않게 덜 자주 훑는다:
+    훑는 시간이 설치 시간의 1/4을 넘지 않고, 그 사이에도 진행 보고는 이어지며 진행률은 계속 오른다"""
+    install_with, _ = fake_steamcmd
+    mb = 1_048_576
+    clock = [0.0]
+    walking = [0.0]
+    monkeypatch.setattr(steamcmd_mod, "_POLL_INTERVAL", 2.0)
+    monkeypatch.setattr(steamcmd_mod.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(steamcmd_mod.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + s))
+    monkeypatch.setattr(steamcmd_mod, "_KNOWN_APP_SIZES", {380870: 10_000 * mb})
+
+    def slow_walk(path):
+        clock[0] += 4
+        walking[0] += 4
+        return int(clock[0]) * 10 * mb
+
+    monkeypatch.setattr(steamcmd_mod, "_dir_size", slow_walk)
+    reported = []
+    monkeypatch.setattr(steamcmd_mod, "progress", lambda pct, msg: reported.append((clock[0], pct)))
+    install_with(_FakeProc(finish_after=120))
+    assert walking[0] <= clock[0] / 4, (walking[0], clock[0])
+    during = reported[:-1]
+    assert max(b[0] - a[0] for a, b in zip(during, during[1:])) <= 30, during
+    percents = [pct for _, pct in during]
+    assert percents == sorted(percents) and percents[-1] > percents[0], percents

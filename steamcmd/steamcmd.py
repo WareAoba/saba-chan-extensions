@@ -76,6 +76,10 @@ _INSTALL_BUDGET = 1740
 # 설치 진행률 모니터링 주기 (초)
 _POLL_INTERVAL = 2.0
 
+# 설치 폴더 훑기는 걸린 시간의 이 배수만큼 쉰 뒤에 다시 한다. 파일 수만 개인 서버를 느린 디스크에 받을 때
+# 2초마다 훑으면 훑기가 받기와 디스크를 다툰다 (훑는 시간이 전체의 1/5를 넘지 않게)
+_SCAN_REST = 4
+
 # Approximate download sizes (bytes) for common dedicated server app IDs.
 # Used to estimate download progress when SteamCMD stdout is buffered.
 # Values are rough estimates and will be refined as more data is available.
@@ -429,6 +433,7 @@ class SteamCMD:
             estimated_total = _KNOWN_APP_SIZES.get(app_id, 0)
             staged_from: Optional[int] = None
             prev_added = 0
+            skip_scans = 0
             timed_out = False
 
             while proc.poll() is None:
@@ -442,11 +447,17 @@ class SteamCMD:
                 if parsed_pct[0] > 0:
                     pct = parsed_pct[0]
                     msg = parsed_msg[0]
+                elif skip_scans > 0:
+                    skip_scans -= 1
+                    pct, msg = max(last_pct, 0), last_msg
                 else:
                     # 디스크 사용량 (install_dir + steamcmd 캐시)
+                    scan_started = time.monotonic()
                     current_size = _dir_size(install_dir)
                     if steamcmd_cache.exists() and steamcmd_cache.parent != install_dir:
                         current_size += _dir_size(steamcmd_cache)
+                    if _POLL_INTERVAL > 0:
+                        skip_scans = int(_SCAN_REST * (time.monotonic() - scan_started) / _POLL_INTERVAL)
                     added = current_size - initial_size
                     # 미리 잡은 크기: BytesToStage를 처음 본 때 받을 양을 넘었으면 그 크기, 그 뒤 받을 양을 넘는 순간이면 그 한 번에 는 크기.
                     # 그 뒤 BytesToStage까지 느는 비율이 받은 비율
