@@ -223,24 +223,30 @@ def test_bubbles_are_short_task_summaries_not_lines():
 
 
 @needs_node
-def test_only_things_done_from_outside_the_app_get_a_bubble():
+def test_things_done_in_the_app_get_a_bubble_too():
+    # 사용자 11-12: 앱 안에서 직접 한 작업도 말풍선으로 (자동 재시작은 따로 '복구 완료'로 알린다)
     r = run_node(
         SCENARIO
         + """
         pet.event('instance.started', { instanceId: 'a', instance: '야생', source: 'gui' });
-        const app = at().bubbles;
+        const app = top();
         t = 5000;
-        pet.event('instance.started', { instanceId: 'a', instance: '야생', source: 'discord', userName: '주인님', guildName: '사바쨩 서버' });
+        pet.event('instance.started', { instanceId: 'b', instance: '팰', source: 'discord', userName: '주인님', guildName: '사바쨩 서버' });
         const discord = top();
-        console.log(JSON.stringify({ app, discord }));
+        t = 20000;
+        pet.event('instance.started', { instanceId: 'c', instance: '좀보', source: 'restart' });
+        const restart = at().bubbles.filter((b) => b.id === 'srv:c');
+        console.log(JSON.stringify({ app, discord, restart }));
         """
     )
-    assert r["app"] == []
+    assert r["app"]["key"] == "bubble.started"
+    assert r["app"]["vars"] == {"server": "야생", "who": {"source": "gui"}}
     assert r["discord"]["key"] == "bubble.started"
     assert r["discord"]["state"] == "done"
     # 사용자 11-11: 첫 줄 한 일과 시킨 사람, 둘째 줄 시각과 장소(디스코드 서버) → 시킨 쪽과 말한 시각을 싣는다
-    assert r["discord"]["vars"] == {"server": "야생", "who": {"user": "주인님", "source": "discord", "place": "사바쨩 서버"}}
+    assert r["discord"]["vars"] == {"server": "팰", "who": {"user": "주인님", "source": "discord", "place": "사바쨩 서버"}}
     assert r["discord"]["at"] == 5000
+    assert r["restart"] == []
 
 
 @needs_node

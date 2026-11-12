@@ -6,7 +6,13 @@
     "mcp": "un agent IA",
     "chatbot": "Saba-chan qui parle",
     "schedule": "une tâche planifiée",
-    "external": "un autre programme"
+    "external": "un autre programme",
+    "gui": "Appli Saba-chan",
+    "cli": "CLI",
+    "daemon": "Saba-chan",
+    "auto_update": "Mise à jour auto",
+    "game": "En jeu",
+    "api": "API"
   },
   "bubble": {
     "started": "{{server}} démarré",

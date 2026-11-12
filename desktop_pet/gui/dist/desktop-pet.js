@@ -92,8 +92,8 @@ var module = { exports: {} };
         return s.loop ? Infinity : s.intro.length * s.ms;
     }
 
-    /** 이 PC 앱·CLI가 아닌 곳에서 시킨 일만 말풍선으로 알린다 (앱에서 누른 것은 이미 보인다) */
-    var REMOTE_SOURCES = ['discord', 'web', 'remote', 'mcp', 'chatbot', 'schedule', 'external'];
+    /** 켜고 끈 일은 어디서 시켰든 말풍선으로 알린다(앱 안에서 누른 것도). 자동 재시작은 '복구 완료'가 따로 알린다 */
+    var SILENT_SOURCES = ['restart'];
 
     /** 바쁜 장면: 이 동안에는 마우스·사소한 일로 장면을 바꾸지 않는다 */
     var BUSY = ['collapse', 'repair', 'cooking'];
@@ -231,13 +231,13 @@ var module = { exports: {} };
             var who = { source: data.source };
             if (data.userName) who.user = data.userName;
             if (data.guildName) who.place = data.guildName;
-            var remote = REMOTE_SOURCES.indexOf(data.source) >= 0;
+            var told = SILENT_SOURCES.indexOf(data.source) < 0;
             switch (type) {
                 case 'instance.started':
                     activity();
                     delete st.collapsed[id];
                     delete st.repairing[id];
-                    if (remote) say('srv:' + id, 'bubble.started', { server: name, who: who }, 'done');
+                    if (told) say('srv:' + id, 'bubble.started', { server: name, who: who }, 'done');
                     play('think');
                     break;
                 case 'instance.ready':
@@ -249,7 +249,7 @@ var module = { exports: {} };
                     activity();
                     delete st.collapsed[id];
                     delete st.repairing[id];
-                    if (remote) say('srv:' + id, 'bubble.stopped', { server: name, who: who }, 'done');
+                    if (told) say('srv:' + id, 'bubble.stopped', { server: name, who: who }, 'done');
                     play('clasp');
                     break;
                 case 'instance.exit':
