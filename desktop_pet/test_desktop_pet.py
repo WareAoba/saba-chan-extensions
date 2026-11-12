@@ -120,12 +120,30 @@ def test_quiet_desk_sweeps_now_and_then_after_ten_minutes_and_sleeps_after_three
         t = M.SLEEP_AFTER + 1; pet.tick();
         const asleep = at().scene;
         pet.hover();
+        const hovered = at().scene;
+        pet.click();
         const woke = at().scene;
         step(10000);
-        console.log(JSON.stringify({ before, after, asleep, woke, then: at().scene }));
+        console.log(JSON.stringify({ before, after, asleep, hovered, woke, then: at().scene }));
         """
     )
-    assert r == {"before": False, "after": True, "asleep": "sleeping", "woke": "waking", "then": "idle"}
+    # 올려 두기만 해서는 깨지 않고, 눌러야 깬다
+    assert r == {"before": False, "after": True, "asleep": "sleeping", "hovered": "sleeping", "woke": "waking", "then": "idle"}
+
+
+@needs_node
+def test_hover_does_not_stop_sweeping_but_a_click_does():
+    r = run_node(
+        SCENARIO
+        + """
+        while (at().scene !== 'sweeping') step(1000, 1000);
+        pet.hover();
+        const hovered = at().scene;
+        pet.click();
+        console.log(JSON.stringify({ hovered, clicked: at().scene }));
+        """
+    )
+    assert r == {"hovered": "sweeping", "clicked": "idle"}
 
 
 @needs_node

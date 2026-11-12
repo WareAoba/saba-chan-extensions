@@ -325,24 +325,22 @@ var module = { exports: {} };
             tick();
         }
 
-        /** 마우스를 올렸다: 점프 (자고 있었으면 깬다). 바쁜 장면에서는 그대로 */
+        /** 마우스를 올렸다: 점프. 자는 중·빗자루질 중에는 그대로 둔다(눌러야 깨거나 멈춘다). 바쁜 장면에서도 그대로 */
         function hover() {
             var t = now();
             var base = currentBase();
-            if (base === 'sleeping') {
-                activity();
-                return tick();
-            }
+            if (base === 'sleeping' || (st.once && st.once.scene === 'sweeping')) return;
             st.lastActivity = t;
             if (BUSY.indexOf(base) >= 0 || t - st.lastHover < HOVER_GAP) return;
-            if (st.once && st.once.scene !== 'blink' && st.once.scene !== 'sweeping') return;
+            if (st.once && st.once.scene !== 'blink') return;
             st.lastHover = t;
             play('jump');
         }
 
-        /** 눌렀다: 쓰러진 것은 일으킨다(앱은 셸이 연다). 말풍선은 닫기 버튼으로만 닫는다 */
+        /** 눌렀다: 쓰러진 것은 일으키고, 자면 깨우고, 빗자루질은 멈춘다(앱은 셸이 연다). 말풍선은 닫기 버튼으로만 닫는다 */
         function click() {
             st.collapsed = {};
+            if (st.once && st.once.scene === 'sweeping') st.once = null;
             activity();
             tick();
         }
