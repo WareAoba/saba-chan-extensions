@@ -636,11 +636,14 @@ class SteamCMD:
         - ``update_available``: bool
         - ``local_buildid``: str | None
         - ``remote_buildid``: str | None
+        - ``local_build_time``: int | None (설치된 빌드를 받은 때, 유닉스 초)
+        - ``remote_build_time``: int | None (그 브랜치의 빌드가 올라온 때, 유닉스 초)
         - ``app_id``: int
         """
         local = get_local_buildid(str(install_dir), app_id)
         local_branch = get_local_branch(str(install_dir), app_id)
         remote: Optional[str] = None
+        remote_time: Optional[int] = None
         # 원격을 모르면 "업데이트 없음"이 아니라 확인 실패다 (화면이 둘을 구분해 보인다)
         failure: Optional[str] = None
 
@@ -649,6 +652,7 @@ class SteamCMD:
                 raw = self._app_info_print(app_id)
                 if raw:
                     remote = parse_remote_buildid(raw, branch=branch)
+                    remote_time = parse_remote_build_time(raw, branch=branch)
                     if remote is None:
                         failure = i18n.t("errors.no_buildid", branch=branch)
                 else:
@@ -680,6 +684,9 @@ class SteamCMD:
             "local_branch": local_branch,
             "local_buildid": local,
             "remote_buildid": remote,
+            # 그 빌드를 받은 때·올라온 때 (유닉스 초). Steam이 알려 주지 않으면 None
+            "local_build_time": get_local_build_time(str(install_dir), app_id),
+            "remote_build_time": remote_time,
             "app_id": app_id,
         }
         if failure:
@@ -794,6 +801,20 @@ def get_local_buildid(install_dir: str, app_id: int) -> Optional[str]:
     return None
 
 
+def get_local_build_time(install_dir: str, app_id: int) -> Optional[int]:
+    """설치된 빌드를 받은 때(유닉스 초)를 app manifest의 ``LastUpdated`` 에서 읽는다. 없으면 ``None``."""
+    manifest_path = resolve_manifest_path(install_dir, app_id)
+    if manifest_path is None:
+        return None
+    try:
+        content = manifest_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return None
+    match = re.search(r'"LastUpdated"\s+"(\d+)"', content)
+    # 한 번도 끝까지 받지 않은 설치는 0이다
+    return int(match.group(1)) or None if match else None
+
+
 def get_local_branch(install_dir: str, app_id: int) -> Optional[str]:
     """설치된 브랜치를 app manifest의 ``BetaKey`` 에서 읽는다. 없으면 ``"public"``.
 
@@ -827,6 +848,17 @@ def parse_remote_buildid(raw_output: str, *, branch: str = "public") -> Optional
 
     Returns the buildid string, or ``None`` if not found.
     """
+    return _parse_branch_number(raw_output, branch, "buildid")
+
+
+def parse_remote_build_time(raw_output: str, *, branch: str = "public") -> Optional[int]:
+    """*branch* 의 빌드가 올라온 때(``timeupdated``, 유닉스 초). 없으면 ``None``."""
+    value = _parse_branch_number(raw_output, branch, "timeupdated")
+    return int(value) if value else None
+
+
+def _parse_branch_number(raw_output: str, branch: str, key: str) -> Optional[str]:
+    """``app_info_print`` 출력의 branches → *branch* 아래 숫자 값 *key*."""
     # Strategy: find the branch section, then extract its buildid.
     # SteamCMD output can use either colon-separated or KV-quoted format.
     lines = raw_output.splitlines()
@@ -858,13 +890,13 @@ def parse_remote_buildid(raw_output: str, *, branch: str = "public") -> Optional
                     continue
                 break
 
-            # Look for buildid in various formats
+            # Look for the key in various formats
             # Format 1: "buildid"		"12345678"
-            m = re.search(r'"buildid"\s+"(\d+)"', stripped)
+            m = re.search(rf'"{key}"\s+"(\d+)"', stripped)
             if m:
                 return m.group(1)
             # Format 2: buildid: 12345678
-            m = re.search(r'buildid[:\s]+(\d+)', stripped)
+            m = re.search(rf'{key}[:\s]+(\d+)', stripped)
             if m:
                 return m.group(1)
 
