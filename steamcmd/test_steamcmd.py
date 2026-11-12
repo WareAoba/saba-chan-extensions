@@ -1100,6 +1100,35 @@ def test_check_update_success_has_no_failure_reason(tmp_path):
     assert "reason" not in result
 
 
+def test_check_update_reports_when_each_build_was_published(tmp_path):
+    """설치된 빌드를 받은 때(appmanifest LastUpdated)와 그 브랜치의 새 빌드가 올라온 때(timeupdated)를 함께 답한다."""
+    steamapps = tmp_path / "steamapps"
+    steamapps.mkdir()
+    (steamapps / "appmanifest_2394010.acf").write_text(
+        '"AppState"\n{\n\t"buildid"\t\t"100"\n\t"LastUpdated"\t\t"1762128000"\n}\n')
+    steam = SteamCMD(explicit_path="/fake/steamcmd")
+    raw = ("branches\n  public\n    buildid: 200\n    timeupdated: 1762819200\n"
+           "  unstable\n    buildid: 300\n    timeupdated: 5\n")
+    with patch.object(steam, "_app_info_print", return_value=raw):
+        with patch.object(type(steam), "available", new_callable=lambda: property(lambda self: True)):
+            result = steam.check_update(app_id=2394010, install_dir=str(tmp_path))
+    assert (result["local_buildid"], result["local_build_time"]) == ("100", 1762128000)
+    assert (result["remote_buildid"], result["remote_build_time"]) == ("200", 1762819200)
+
+
+def test_check_update_leaves_build_times_empty_when_steam_gives_none(tmp_path):
+    """때를 모르면 지어내지 않는다 (화면은 빌드 번호만 보인다)."""
+    steamapps = tmp_path / "steamapps"
+    steamapps.mkdir()
+    (steamapps / "appmanifest_2394010.acf").write_text('"AppState"\n{\n\t"buildid"\t\t"100"\n}\n')
+    steam = SteamCMD(explicit_path="/fake/steamcmd")
+    with patch.object(steam, "_app_info_print", return_value="branches\n  public\n    buildid: 200\n"):
+        with patch.object(type(steam), "available", new_callable=lambda: property(lambda self: True)):
+            result = steam.check_update(app_id=2394010, install_dir=str(tmp_path))
+    assert result["local_build_time"] is None
+    assert result["remote_build_time"] is None
+
+
 # ── 문구는 앱 언어를 따른다 (locales) ──
 
 LOCALES_DIR = os.path.join(os.path.dirname(__file__), "locales")
