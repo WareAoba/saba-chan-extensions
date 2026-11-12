@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "desktop-pet",
   "name": "Desktop Pet",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Puts a small Saba-chan in a corner of your desktop who reacts to your servers",
   "descriptions": {
     "ko": "바탕화면 구석에 서버 일에 반응하는 작은 사바쨩을 띄웁니다",

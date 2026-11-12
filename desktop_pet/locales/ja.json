@@ -6,7 +6,13 @@
     "mcp": "AIエージェント",
     "chatbot": "おしゃべりサバちゃん",
     "schedule": "予約タスク",
-    "external": "外部プログラム"
+    "external": "外部プログラム",
+    "gui": "サバちゃんアプリ",
+    "cli": "CLI",
+    "daemon": "サバちゃん",
+    "auto_update": "自動アップデート",
+    "game": "ゲーム内",
+    "api": "API"
   },
   "bubble": {
     "started": "{{server}} 起動完了",

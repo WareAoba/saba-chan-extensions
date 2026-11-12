@@ -92,8 +92,8 @@ var module = { exports: {} };
         return s.loop ? Infinity : s.intro.length * s.ms;
     }
 
-    /** 이 PC 앱·CLI가 아닌 곳에서 시킨 일만 말풍선으로 알린다 (앱에서 누른 것은 이미 보인다) */
-    var REMOTE_SOURCES = ['discord', 'web', 'remote', 'mcp', 'chatbot', 'schedule', 'external'];
+    /** 켜고 끈 일은 어디서 시켰든 말풍선으로 알린다(앱 안에서 누른 것도). 자동 재시작은 '복구 완료'가 따로 알린다 */
+    var SILENT_SOURCES = ['restart'];
 
     /** 바쁜 장면: 이 동안에는 마우스·사소한 일로 장면을 바꾸지 않는다 */
     var BUSY = ['collapse', 'repair', 'cooking'];
@@ -231,13 +231,13 @@ var module = { exports: {} };
             var who = { source: data.source };
             if (data.userName) who.user = data.userName;
             if (data.guildName) who.place = data.guildName;
-            var remote = REMOTE_SOURCES.indexOf(data.source) >= 0;
+            var told = SILENT_SOURCES.indexOf(data.source) < 0;
             switch (type) {
                 case 'instance.started':
                     activity();
                     delete st.collapsed[id];
                     delete st.repairing[id];
-                    if (remote) say('srv:' + id, 'bubble.started', { server: name, who: who }, 'done');
+                    if (told) say('srv:' + id, 'bubble.started', { server: name, who: who }, 'done');
                     play('think');
                     break;
                 case 'instance.ready':
@@ -249,7 +249,7 @@ var module = { exports: {} };
                     activity();
                     delete st.collapsed[id];
                     delete st.repairing[id];
-                    if (remote) say('srv:' + id, 'bubble.stopped', { server: name, who: who }, 'done');
+                    if (told) say('srv:' + id, 'bubble.stopped', { server: name, who: who }, 'done');
                     play('clasp');
                     break;
                 case 'instance.exit':
@@ -325,24 +325,22 @@ var module = { exports: {} };
             tick();
         }
 
-        /** 마우스를 올렸다: 점프 (자고 있었으면 깬다). 바쁜 장면에서는 그대로 */
+        /** 마우스를 올렸다: 점프. 자는 중·빗자루질 중에는 그대로 둔다(눌러야 깨거나 멈춘다). 바쁜 장면에서도 그대로 */
         function hover() {
             var t = now();
             var base = currentBase();
-            if (base === 'sleeping') {
-                activity();
-                return tick();
-            }
+            if (base === 'sleeping' || (st.once && st.once.scene === 'sweeping')) return;
             st.lastActivity = t;
             if (BUSY.indexOf(base) >= 0 || t - st.lastHover < HOVER_GAP) return;
-            if (st.once && st.once.scene !== 'blink' && st.once.scene !== 'sweeping') return;
+            if (st.once && st.once.scene !== 'blink') return;
             st.lastHover = t;
             play('jump');
         }
 
-        /** 눌렀다: 쓰러진 것은 일으킨다(앱은 셸이 연다). 말풍선은 닫기 버튼으로만 닫는다 */
+        /** 눌렀다: 쓰러진 것은 일으키고, 자면 깨우고, 빗자루질은 멈춘다(앱은 셸이 연다). 말풍선은 닫기 버튼으로만 닫는다 */
         function click() {
             st.collapsed = {};
+            if (st.once && st.once.scene === 'sweeping') st.once = null;
             activity();
             tick();
         }

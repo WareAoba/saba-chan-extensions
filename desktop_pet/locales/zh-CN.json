@@ -6,7 +6,13 @@
     "mcp": "AI 代理",
     "chatbot": "会说话的 Saba-chan",
     "schedule": "计划任务",
-    "external": "外部程序"
+    "external": "外部程序",
+    "gui": "Saba-chan 应用",
+    "cli": "CLI",
+    "daemon": "Saba-chan",
+    "auto_update": "自动更新",
+    "game": "游戏内",
+    "api": "API"
   },
   "bubble": {
     "started": "{{server}} 已启动",

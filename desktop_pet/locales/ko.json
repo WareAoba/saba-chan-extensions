@@ -6,7 +6,13 @@
     "mcp": "AI 에이전트",
     "chatbot": "말하는 사바쨩",
     "schedule": "예약 작업",
-    "external": "바깥 프로그램"
+    "external": "바깥 프로그램",
+    "gui": "사바쨩 앱",
+    "cli": "CLI",
+    "daemon": "사바쨩",
+    "auto_update": "자동 업데이트",
+    "game": "게임 안",
+    "api": "API"
   },
   "bubble": {
     "started": "{{server}} 시작 완료",
