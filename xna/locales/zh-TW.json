@@ -1,0 +1,11 @@
+{
+  "errors": {
+    "bad_installer": "無法讀取 XNA 安裝程式：{{error}}",
+    "temp_write_failed": "無法在伺服器資料夾中寫入暫存檔：{{error}}",
+    "not_official": "下載的 XNA 安裝程式不是官方檔案",
+    "download_failed": "XNA 下載失敗：{{error}}",
+    "read_failed": "無法開啟下載的 XNA 安裝程式：{{error}}",
+    "file_mismatch": "XNA 安裝程式中的 {{name}} 不是預期的檔案",
+    "write_failed": "無法將 XNA 檔案寫入伺服器資料夾：{{error}}"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "errors": {
+    "bad_installer": "Não foi possível ler o instalador do XNA: {{error}}",
+    "temp_write_failed": "Não foi possível gravar um arquivo temporário na pasta do servidor: {{error}}",
+    "not_official": "O instalador do XNA baixado não é o arquivo oficial",
+    "download_failed": "Não foi possível baixar o XNA: {{error}}",
+    "read_failed": "Não foi possível abrir o instalador do XNA baixado: {{error}}",
+    "file_mismatch": "{{name}} no instalador do XNA não é o arquivo esperado",
+    "write_failed": "Não foi possível gravar os arquivos do XNA na pasta do servidor: {{error}}"
+  }
+}

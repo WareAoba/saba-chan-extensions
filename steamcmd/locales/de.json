@@ -1,0 +1,26 @@
+{
+  "messages": {
+    "connecting": "Verbindung zu Steam wird hergestellt...",
+    "downloading": "Download: {{done}}/{{total}} MB",
+    "downloading_percent": "Download: {{done}}/{{total}} MB ({{percent}}%)",
+    "downloading_unknown": "Download läuft... ({{done}} MB)",
+    "preparing": "Serverdateien werden vorbereitet...",
+    "installed": "Serverdateien wurden installiert",
+    "install_done": "App {{app_id}} wurde in {{install_dir}} installiert"
+  },
+  "errors": {
+    "failed": "SteamCMD ist fehlgeschlagen (Exitcode {{code}}): {{detail}}",
+    "failed_after_retries": "SteamCMD ist bei allen Versuchen fehlgeschlagen",
+    "timed_out": "SteamCMD wurde nach {{seconds}} s ohne Ergebnis abgebrochen",
+    "bootstrap_timed_out": "SteamCMD konnte nicht innerhalb von {{seconds}} s heruntergeladen werden",
+    "disk_write": "Dateien konnten nicht in den Installationsordner geschrieben werden. Prüfe das Laufwerk, die Schreibrechte des Ordners und Blockierungen durch Antivirensoftware. ({{detail}})",
+    "disk_space": "Nicht genug Speicherplatz. Gib Platz auf dem Installationslaufwerk frei und versuche es erneut. ({{detail}})",
+    "invalid_platform": "Steam bietet keine Serverdateien für dieses Betriebssystem an. ({{detail}})",
+    "no_subscription": "Diese Serverdateien lassen sich nicht mit anonymer Anmeldung herunterladen. Dieser Server braucht ein Steam-Konto, das das Spiel besitzt. ({{detail}})",
+    "unavailable": "SteamCMD ist nicht verfügbar",
+    "no_buildid": "SteamCMD hat keine Build-Nummer für den Zweig '{{branch}}' gemeldet",
+    "app_info_empty": "SteamCMD hat keine App-Informationen zurückgegeben",
+    "app_info_failed": "App-Informationen konnten nicht aus SteamCMD gelesen werden: {{error}}",
+    "app_id_required": "Die Steam-App-ID fehlt"
+  }
+}

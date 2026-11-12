@@ -1,0 +1,26 @@
+{
+  "messages": {
+    "connecting": "Conectando con Steam...",
+    "downloading": "Descargando: {{done}}/{{total}} MB",
+    "downloading_percent": "Descargando: {{done}}/{{total}} MB ({{percent}}%)",
+    "downloading_unknown": "Descargando... ({{done}} MB)",
+    "preparing": "Preparando los archivos del servidor...",
+    "installed": "Archivos del servidor instalados",
+    "install_done": "La aplicación {{app_id}} se instaló en {{install_dir}}"
+  },
+  "errors": {
+    "failed": "SteamCMD falló (código de salida {{code}}): {{detail}}",
+    "failed_after_retries": "SteamCMD falló en todos los intentos",
+    "timed_out": "SteamCMD no terminó en {{seconds}} s y se detuvo",
+    "bootstrap_timed_out": "SteamCMD no se descargó en {{seconds}} s",
+    "disk_write": "No se pudieron escribir archivos en la carpeta de instalación. Revisa la unidad, el permiso de escritura de la carpeta y el bloqueo del antivirus. ({{detail}})",
+    "disk_space": "No hay espacio suficiente en el disco. Libera espacio en la unidad de instalación y vuelve a intentarlo. ({{detail}})",
+    "invalid_platform": "Steam no ofrece archivos de servidor para este sistema operativo. ({{detail}})",
+    "no_subscription": "Estos archivos de servidor no se pueden descargar con inicio de sesión anónimo. Este servidor necesita una cuenta de Steam que tenga el juego. ({{detail}})",
+    "unavailable": "SteamCMD no está disponible",
+    "no_buildid": "SteamCMD no informó el número de compilación de la rama '{{branch}}'",
+    "app_info_empty": "SteamCMD no devolvió la información de la aplicación",
+    "app_info_failed": "No se pudo leer la información de la aplicación desde SteamCMD: {{error}}",
+    "app_id_required": "Falta el ID de aplicación de Steam"
+  }
+}

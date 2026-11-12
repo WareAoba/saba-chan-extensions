@@ -1,0 +1,26 @@
+{
+  "messages": {
+    "connecting": "正在連線到 Steam...",
+    "downloading": "正在下載：{{done}}/{{total}} MB",
+    "downloading_percent": "正在下載：{{done}}/{{total}} MB ({{percent}}%)",
+    "downloading_unknown": "正在下載...（{{done}} MB）",
+    "preparing": "正在準備伺服器檔案...",
+    "installed": "伺服器檔案已安裝",
+    "install_done": "已將應用程式 {{app_id}} 安裝到 {{install_dir}}"
+  },
+  "errors": {
+    "failed": "SteamCMD 失敗（結束代碼 {{code}}）：{{detail}}",
+    "failed_after_retries": "SteamCMD 多次重試後仍然失敗",
+    "timed_out": "SteamCMD 在 {{seconds}} 秒內未完成，已中止",
+    "bootstrap_timed_out": "未能在 {{seconds}} 秒內下載 SteamCMD",
+    "disk_write": "無法將檔案寫入安裝資料夾。請檢查磁碟狀態、資料夾寫入權限和防毒軟體封鎖。（{{detail}}）",
+    "disk_space": "磁碟空間不足。請釋放安裝磁碟的空間後再試一次。（{{detail}}）",
+    "invalid_platform": "Steam 沒有提供適用於此作業系統的伺服器檔案。（{{detail}}）",
+    "no_subscription": "匿名登入無法下載這些伺服器檔案。此伺服器需要擁有該遊戲的 Steam 帳號。（{{detail}}）",
+    "unavailable": "SteamCMD 無法使用",
+    "no_buildid": "SteamCMD 沒有回報分支「{{branch}}」的組建編號",
+    "app_info_empty": "SteamCMD 沒有回傳應用程式資訊",
+    "app_info_failed": "無法從 SteamCMD 讀取應用程式資訊：{{error}}",
+    "app_id_required": "缺少 Steam 應用程式 ID"
+  }
+}

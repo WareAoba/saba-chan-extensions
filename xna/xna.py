@@ -29,6 +29,9 @@ import zlib
 from pathlib import Path
 
 from daemon_rcon import ChecksumMismatch, atomic_write, download
+from i18n import I18n
+
+i18n = I18n(os.path.dirname(os.path.abspath(__file__)))
 
 VERSION = "4.0-refresh"
 # Microsoft XNA Framework Redistributable 4.0 Refresh
@@ -170,7 +173,7 @@ def files_from_msi(data: bytes) -> dict[str, bytes]:
         files = _cab_files(_msi_cabinet(data))
         return {name: files[key] for key, name, _ in FILES}
     except (ValueError, struct.error, KeyError, IndexError, zlib.error) as e:
-        raise XnaError("bad_installer", f"XNA installer could not be read: {e!r}") from None
+        raise XnaError("bad_installer", i18n.t("errors.bad_installer", error=repr(e))) from None
 
 
 def _fetch(work_dir: Path) -> dict[str, bytes]:
@@ -180,21 +183,21 @@ def _fetch(work_dir: Path) -> dict[str, bytes]:
         fd, msi = tempfile.mkstemp(prefix=".xna-", suffix=".download", dir=work_dir)
         os.close(fd)
     except OSError as e:
-        raise XnaError("write_failed", f"Could not write a temporary file in the server folder: {_reason(e)}") from None
+        raise XnaError("write_failed", i18n.t("errors.temp_write_failed", error=_reason(e))) from None
     try:
         try:
             download(MSI_URL, msi, checksums={"sha256": MSI_SHA256})
         except ChecksumMismatch:
-            raise XnaError("checksum_mismatch", "The downloaded XNA installer is not the official file") from None
+            raise XnaError("checksum_mismatch", i18n.t("errors.not_official")) from None
         except OSError as e:
-            raise XnaError("download_failed", f"XNA download failed: {_reason(e)}") from None
+            raise XnaError("download_failed", i18n.t("errors.download_failed", error=_reason(e))) from None
         except http.client.HTTPException as e:
             # 받는 중에 연결이 끊김(IncompleteRead 등)
-            raise XnaError("download_failed", f"XNA download failed: {type(e).__name__}") from None
+            raise XnaError("download_failed", i18n.t("errors.download_failed", error=type(e).__name__)) from None
         try:
             data = Path(msi).read_bytes()
         except OSError as e:
-            raise XnaError("write_failed", f"Could not read the downloaded XNA installer: {_reason(e)}") from None
+            raise XnaError("write_failed", i18n.t("errors.read_failed", error=_reason(e))) from None
     finally:
         try:
             os.remove(msi)
@@ -203,7 +206,7 @@ def _fetch(work_dir: Path) -> dict[str, bytes]:
     files = files_from_msi(data)
     for _, name, digest in FILES:
         if _sha256(files[name]) != digest:
-            raise XnaError("checksum_mismatch", f"{name} in the XNA installer is not the expected file")
+            raise XnaError("checksum_mismatch", i18n.t("errors.file_mismatch", name=name))
     return files
 
 
@@ -228,5 +231,5 @@ def install(target_dir) -> list[str]:
             if not _matches(target / name, digest):
                 atomic_write(target / name, files[name])
     except OSError as e:
-        raise XnaError("write_failed", f"Could not write XNA files to the server folder: {_reason(e)}") from None
+        raise XnaError("write_failed", i18n.t("errors.write_failed", error=_reason(e))) from None
     return [name for _, name, _ in FILES]
