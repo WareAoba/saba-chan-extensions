@@ -36,3 +36,12 @@ if importlib.util.find_spec('daemon_rcon') is None:
         if _runtime and os.path.isfile(os.path.join(_runtime, 'daemon_rcon.py')):
             sys.path.insert(0, _runtime)
             break
+
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _no_inherited_language(monkeypatch):
+    """문구를 보는 테스트가 실행한 사람의 SABA_LANG을 따르지 않게 한다 (언어를 보는 테스트는 스스로 정한다)"""
+    monkeypatch.delenv("SABA_LANG", raising=False)
