@@ -1,5 +1,5 @@
 /*
- * 데스크톱 펫 화면 (slot `Desktop.overlay`). build.py가 machine.js(M)·스프라이트(SPRITES)와 한 파일로 묶는다.
+ * 데스크톱 펫 화면 (slot `Desktop.overlay`). build.py가 machine.js(M)·스프라이트 표(SPRITES)와 한 파일로 묶는다.
  * React는 앱이 건넨 window.React(19)를 쓴다. 창 일(누르면 앱 열기·끌기·우클릭 메뉴)은 앱의 오버레이 창이 맡는다.
  */
 /* global M, SPRITES */
@@ -238,9 +238,41 @@ function Bubbles(props) {
     );
 }
 
+/** 받지 못한 그림을 다시 받기까지 */
+var SHEET_RETRY_MS = 5000;
+/** 장면 → 그릴 수 있게 받아 풀어 둔 그림 띠 URL */
+var sheets = {};
+/** 장면 → 그림을 받기 시작한 때 (받지 못했으면 SHEET_RETRY_MS 뒤에 다시) */
+var asked = {};
+
+/**
+ * 장면의 그림 띠(manifest `gui.assets`)는 그 장면이 처음 나올 때 앱에서 받는다(host.assetUrl).
+ * 다 풀린 뒤에 그려 빈 칸이 보이지 않게 한다
+ */
+function loadSheet(host, scene, onReady) {
+    var sprite = SPRITES[scene];
+    if (!sprite || sheets[scene] || Date.now() - (asked[scene] || 0) < SHEET_RETRY_MS) return;
+    asked[scene] = Date.now();
+    host.assetUrl(sprite.file).then(
+        function (url) {
+            if (!url) return;
+            var ready = function () {
+                sheets[scene] = url;
+                onReady();
+            };
+            var img = new Image();
+            img.src = url;
+            if (typeof img.decode === 'function') img.decode().then(ready, ready);
+            else img.onload = img.onerror = ready;
+        },
+        function () {},
+    );
+}
+
 function Sprite(props) {
     var sheet = SPRITES[props.scene];
-    if (!sheet || props.frame < 0) return null;
+    var url = sheets[props.scene];
+    if (!sheet || !url || props.frame < 0) return null;
     var w = CELL_W * SCALE;
     var hgt = CELL_H * SCALE;
     return h('div', {
@@ -249,7 +281,7 @@ function Sprite(props) {
         style: {
             width: w + 'px',
             height: hgt + 'px',
-            backgroundImage: 'url(' + sheet.url + ')',
+            backgroundImage: 'url(' + url + ')',
             backgroundSize: sheet.frames * w + 'px ' + hgt + 'px',
             backgroundPosition: -props.frame * w + 'px 0',
         },
@@ -264,6 +296,8 @@ function Pet(props) {
     var machine = machineRef.current;
     var _a = React.useState(0);
     var setNow = _a[1];
+    /** 마지막으로 그린 장면과 칸: 새 장면의 그림을 받는 동안 그대로 둔다 */
+    var drawn = React.useRef(null);
 
     var view = machine.view();
     var elapsed = Date.now() - view.at;
@@ -279,6 +313,13 @@ function Pet(props) {
         return function () {
             clearTimeout(timer);
         };
+    });
+
+    // 지금 장면의 그림을 아직 받지 않았으면 받는다
+    React.useEffect(function () {
+        loadSheet(host, view.scene, function () {
+            setNow(Date.now());
+        });
     });
 
     // 데몬 이벤트
@@ -297,6 +338,8 @@ function Pet(props) {
         var s = M.SCENES[view.scene];
         frame = s.intro[s.intro.length - 1];
     }
+    if (sheets[view.scene]) drawn.current = { scene: view.scene, frame: frame };
+    var shown = drawn.current;
 
     return h(
         'div',
@@ -333,7 +376,7 @@ function Pet(props) {
                 setNow(Date.now());
             },
         }),
-        h(Sprite, { scene: view.scene, frame: frame }),
+        shown ? h(Sprite, { scene: shown.scene, frame: shown.frame }) : null,
     );
 }
 

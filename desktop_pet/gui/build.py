@@ -1,13 +1,13 @@
-"""데스크톱 펫 GUI 번들 만들기: src/machine.js + 스프라이트(data URI) + src/pet.js → dist/desktop-pet.js
+"""데스크톱 펫 GUI 번들 만들기: src/machine.js + 스프라이트 표(SPRITES) + src/pet.js → dist/desktop-pet.js
 
-앱은 익스텐션 폴더에서 번들(`gui.bundle`)과 스타일(`gui.styles`)만 받으므로 스프라이트를 번들 안에 넣는다.
+스프라이트 그림은 번들에 넣지 않는다. manifest `gui.assets`(gui/sprites)에 두고, 장면이 처음 나올 때 번들이
+앱에서 받는다(`host.assetUrl`). 번들에는 장면마다 파일 이름과 칸 수만 싣는다.
 빌드 도구 없이 이 스크립트 하나로 묶는다(React는 앱의 window.React). 스프라이트나 src를 고치면 다시 돌리고 dist를 함께 커밋한다:
 
     python desktop_pet/gui/build.py
 """
 from __future__ import annotations
 
-import base64
 import json
 import re
 import sys
@@ -15,6 +15,8 @@ from pathlib import Path
 
 GUI = Path(__file__).resolve().parent
 OUT = GUI / "dist" / "desktop-pet.js"
+# 스프라이트 폴더는 manifest `gui.assets` 한 곳에서 정한다
+ASSETS = GUI.parent / json.loads((GUI.parent / "manifest.json").read_text(encoding="utf-8"))["gui"]["assets"]
 
 
 def sprite_frames(name: str, width: int) -> int:
@@ -31,12 +33,9 @@ def webp_width(data: bytes) -> int:
 
 def build() -> str:
     sprites = {}
-    for path in sorted((GUI / "sprites").glob("*.webp")):
+    for path in sorted(ASSETS.glob("*.webp")):
         data = path.read_bytes()
-        sprites[path.stem] = {
-            "url": "data:image/webp;base64," + base64.b64encode(data).decode("ascii"),
-            "frames": sprite_frames(path.stem, webp_width(data)),
-        }
+        sprites[path.stem] = {"file": path.name, "frames": sprite_frames(path.stem, webp_width(data))}
     machine = (GUI / "src" / "machine.js").read_text(encoding="utf-8")
     pet = (GUI / "src" / "pet.js").read_text(encoding="utf-8")
     return (

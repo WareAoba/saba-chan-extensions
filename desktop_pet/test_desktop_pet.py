@@ -46,6 +46,7 @@ def test_the_manifest_declares_only_the_desktop_overlay_slot_and_its_files_exist
     assert list(m["gui"]["slots"]) == ["Desktop.overlay"]
     assert (HERE / m["gui"]["bundle"]).is_file()
     assert (HERE / m["gui"]["styles"]).is_file()
+    assert (HERE / m["gui"]["assets"]).is_dir()
     assert set(m["descriptions"]) == set(LOCALES) - {"en"}
     assert (HERE / "icon.png").is_file()
 
@@ -70,6 +71,15 @@ def test_every_bubble_the_machine_says_has_a_line():
 
 def test_the_committed_bundle_is_up_to_date():
     assert (GUI / "dist" / "desktop-pet.js").read_text(encoding="utf-8") == build.build(), "run python desktop_pet/gui/build.py"
+
+
+def test_sprites_are_files_the_bundle_names_not_images_inside_it():
+    """스프라이트는 manifest `gui.assets`에서 장면이 처음 나올 때 받는다: 번들에는 이름만 싣는다"""
+    bundle = build.build()
+    assert "data:image" not in bundle
+    sprites = json.loads(re.search(r"^var SPRITES = (.*);$", bundle, re.M).group(1))
+    assets = HERE / manifest()["gui"]["assets"]
+    assert sprites and all((assets / s["file"]).is_file() for s in sprites.values())
 
 
 def run_node(script: str):
