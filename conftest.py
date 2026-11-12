@@ -38,10 +38,6 @@ if importlib.util.find_spec('daemon_rcon') is None:
             break
 
 
-import pytest
-
-
-@pytest.fixture(autouse=True)
-def _no_inherited_language(monkeypatch):
-    """문구를 보는 테스트가 실행한 사람의 SABA_LANG을 따르지 않게 한다 (언어를 보는 테스트는 스스로 정한다)"""
-    monkeypatch.delenv("SABA_LANG", raising=False)
+# 플러그인은 불러올 때 SABA_LANG으로 문구 언어를 정한다. 문구를 보는 테스트가 실행한 사람의 환경을 따르지 않게 지운다
+# (언어를 보는 테스트는 스스로 정한다)
+os.environ.pop("SABA_LANG", None)
