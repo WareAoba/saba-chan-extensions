@@ -39,6 +39,9 @@ from pathlib import Path
 from typing import Any, Optional
 
 from daemon_rcon import download, progress, run_lifecycle
+from i18n import I18n
+
+i18n = I18n(os.path.dirname(os.path.abspath(__file__)))
 
 # ── Constants ────────────────────────────────────────────────────
 
@@ -53,8 +56,13 @@ _STEAMCMD_URLS: dict[str, str] = {
 _EXE_NAME = "steamcmd.exe" if _SYSTEM == "Windows" else "steamcmd.sh"
 
 _PORTABLE_SUBDIR = "steamcmd"
-# 다시 돌려도 풀리지 않는 설치 실패 (종료 코드 8)
-_PERMANENT_FAILURES = ("Disk write failure", "Not enough disk space", "Invalid platform", "No subscription")
+# 다시 돌려도 풀리지 않는 설치 실패 (종료 코드 8) → 원인을 알리는 문구 키
+_PERMANENT_FAILURES = {
+    "Disk write failure": "errors.disk_write",
+    "Not enough disk space": "errors.disk_space",
+    "Invalid platform": "errors.invalid_platform",
+    "No subscription": "errors.no_subscription",
+}
 
 # SteamCMD 자체를 받는 제한 시간 (처음 설치는 이것을 먼저 한다). 읽기 한 번은 _READ_TIMEOUT 안에 끝나야 해서
 # 한도를 넘는 것은 그 한 번만큼이다
@@ -120,10 +128,11 @@ def _disk_progress(added_bytes: int, total: int) -> tuple[Optional[int], str]:
     """
     added_mb = added_bytes / 1_048_576
     if 0 < added_bytes < total:
-        return min(int(added_bytes * 99 / total), 99), f"Downloading: {added_mb:.0f}/{total / 1_048_576:.0f} MB"
+        return min(int(added_bytes * 99 / total), 99), i18n.t(
+            "messages.downloading", done=f"{added_mb:.0f}", total=f"{total / 1_048_576:.0f}")
     if added_mb > 1:
-        return (None if total > 0 else 0), f"Downloading... ({added_mb:.0f} MB)"
-    return 0, "Preparing server files..."
+        return (None if total > 0 else 0), i18n.t("messages.downloading_unknown", done=f"{added_mb:.0f}")
+    return 0, i18n.t("messages.preparing")
 
 
 def _manifest_bytes(install_dir: str, app_id: int) -> dict[str, int]:
@@ -179,7 +188,8 @@ def _manifest_progress(install_dir: str, app_id: int, added_bytes: int = 0,
     elif done < added_bytes < total:
         done = added_bytes
     pct = min(int(done * 100 / total), 99)
-    return pct, f"Downloading: {done / 1_048_576:.0f}/{total / 1_048_576:.0f} MB ({pct}%)"
+    return pct, i18n.t("messages.downloading_percent", done=f"{done / 1_048_576:.0f}",
+                       total=f"{total / 1_048_576:.0f}", percent=pct)
 
 
 def _portable_dir() -> Path:
@@ -389,7 +399,7 @@ class SteamCMD:
             stdout_lines: list[str] = []
             parsed_pct = [0]  # mutable from thread
             parsed_total = [0]  # total bytes from progress line
-            parsed_msg = ["Connecting to Steam..."]
+            parsed_msg = [i18n.t("messages.connecting")]
 
             def _reader():
                 try:
@@ -402,7 +412,8 @@ class SteamCMD:
                             parsed_total[0] = int(m.group(3))
                             dl_mb = int(m.group(2)) / 1_048_576
                             total_mb = parsed_total[0] / 1_048_576
-                            parsed_msg[0] = f"Downloading: {dl_mb:.0f}/{total_mb:.0f} MB ({parsed_pct[0]}%)"
+                            parsed_msg[0] = i18n.t("messages.downloading_percent", done=f"{dl_mb:.0f}",
+                                                   total=f"{total_mb:.0f}", percent=parsed_pct[0])
                 except Exception:
                     pass
 
@@ -411,7 +422,7 @@ class SteamCMD:
 
             # ── 디스크 사용량 기반 프로그레스 모니터링 (메인 스레드) ──
             # SteamCMD stdout이 버퍼링되어도 디스크 사용량은 실시간으로 변함.
-            progress(0, "Connecting to Steam...")
+            progress(0, i18n.t("messages.connecting"))
             last_msg = ""
             last_pct = -1
             heartbeat_counter = 0
@@ -473,7 +484,7 @@ class SteamCMD:
                 _log(f"SteamCMD timed out after {timeout} s for app {app_id}; process killed")
                 return {
                     "success": False,
-                    "message": f"SteamCMD timed out after {timeout} s",
+                    "message": i18n.t("errors.timed_out", seconds=f"{timeout:.0f}"),
                     "install_dir": None,
                     "app_id": app_id,
                 }
@@ -484,7 +495,7 @@ class SteamCMD:
             returncode = proc.returncode
 
             if returncode == 0 or "Success! App" in stdout:
-                progress(100, "Server files installed successfully")
+                progress(100, i18n.t("messages.installed"))
                 _log(f"SteamCMD install completed for app {app_id}")
 
                 # SteamCMD validate는 파일 검증만 하고 appmanifest의 buildid를
@@ -493,7 +504,7 @@ class SteamCMD:
 
                 return {
                     "success": True,
-                    "message": f"Successfully installed app {app_id} to {install_dir}",
+                    "message": i18n.t("messages.install_done", app_id=app_id, install_dir=install_dir),
                     "install_dir": str(install_dir),
                     "app_id": app_id,
                 }
@@ -510,9 +521,11 @@ class SteamCMD:
             errors = [line.strip() for line in stdout.splitlines() if line.strip().upper().startswith("ERROR!")]
             detail = errors[-1] if errors else stdout[-2000:]
             _log(f"SteamCMD failed for app {app_id}: {detail}")
+            cause = next((key for reason, key in _PERMANENT_FAILURES.items() if reason in stdout), None)
             return {
                 "success": False,
-                "message": f"SteamCMD failed (exit code {returncode}): {detail}",
+                "message": i18n.t(cause, detail=detail) if cause
+                else i18n.t("errors.failed", code=returncode, detail=detail),
                 "install_dir": None,
                 "app_id": app_id,
             }
@@ -520,7 +533,7 @@ class SteamCMD:
         # Should not reach here, but just in case
         return {
             "success": False,
-            "message": "SteamCMD failed after all attempts",
+            "message": i18n.t("errors.failed_after_retries"),
             "install_dir": None,
             "app_id": app_id,
         }
@@ -626,14 +639,14 @@ class SteamCMD:
                 if raw:
                     remote = parse_remote_buildid(raw, branch=branch)
                     if remote is None:
-                        failure = f"SteamCMD did not report a buildid for branch '{branch}'"
+                        failure = i18n.t("errors.no_buildid", branch=branch)
                 else:
-                    failure = "SteamCMD app_info_print returned no output"
+                    failure = i18n.t("errors.app_info_empty")
             except Exception as e:
                 _log(f"Failed to query remote buildid for app {app_id}: {e}")
-                failure = f"SteamCMD app_info_print failed: {e}"
+                failure = i18n.t("errors.app_info_failed", error=e)
         else:
-            failure = "SteamCMD is not available"
+            failure = i18n.t("errors.unavailable")
 
         update_available = False
         if local and remote and local_branch is not None and local_branch != branch:
@@ -935,7 +948,7 @@ def _download_archive(url: str, dest: str, *, timeout: int) -> None:
 
     def on_progress(downloaded: int, total: int) -> None:
         if time.monotonic() > deadline:
-            raise TimeoutError(f"SteamCMD download did not finish within {timeout}s")
+            raise TimeoutError(i18n.t("errors.bootstrap_timed_out", seconds=timeout))
         if total > 0:
             raw_pct = min(int(downloaded * 100 / total), 100)
             if raw_pct != last_pct[0]:
@@ -1073,7 +1086,7 @@ def _plugin_check_update(config: dict) -> dict:
             "remote_buildid": None,
             "app_id": None,
             "reason": "check_failed",
-            "error": "app_id is required",
+            "error": i18n.t("errors.app_id_required"),
         }
 
     # Even if SteamCMD isn't available, we can still report local buildid

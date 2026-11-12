@@ -1,0 +1,26 @@
+{
+  "messages": {
+    "connecting": "Подключение к Steam...",
+    "downloading": "Загрузка: {{done}}/{{total}} МБ",
+    "downloading_percent": "Загрузка: {{done}}/{{total}} МБ ({{percent}}%)",
+    "downloading_unknown": "Загрузка... ({{done}} МБ)",
+    "preparing": "Подготовка файлов сервера...",
+    "installed": "Файлы сервера установлены",
+    "install_done": "Приложение {{app_id}} установлено в {{install_dir}}"
+  },
+  "errors": {
+    "failed": "Сбой SteamCMD (код выхода {{code}}): {{detail}}",
+    "failed_after_retries": "SteamCMD не сработал ни с одной попытки",
+    "timed_out": "SteamCMD не завершился за {{seconds}} с и был остановлен",
+    "bootstrap_timed_out": "Не удалось загрузить SteamCMD за {{seconds}} с",
+    "disk_write": "Не удалось записать файлы в папку установки. Проверьте диск, права на запись в папку и блокировку антивирусом. ({{detail}})",
+    "disk_space": "Недостаточно места на диске. Освободите место на диске установки и повторите попытку. ({{detail}})",
+    "invalid_platform": "В Steam нет файлов сервера для этой операционной системы. ({{detail}})",
+    "no_subscription": "Эти файлы сервера нельзя загрузить с анонимным входом. Нужна учётная запись Steam, у которой есть игра. ({{detail}})",
+    "unavailable": "SteamCMD недоступен",
+    "no_buildid": "SteamCMD не сообщил номер сборки для ветки '{{branch}}'",
+    "app_info_empty": "SteamCMD не вернул сведения о приложении",
+    "app_info_failed": "Не удалось получить сведения о приложении из SteamCMD: {{error}}",
+    "app_id_required": "Не указан ID приложения Steam"
+  }
+}

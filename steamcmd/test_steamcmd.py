@@ -1098,3 +1098,76 @@ def test_check_update_success_has_no_failure_reason(tmp_path):
             result = steam.check_update(app_id=2394010, install_dir=str(tmp_path))
     assert result["remote_buildid"] == "5"
     assert "reason" not in result
+
+
+# ── 문구는 앱 언어를 따른다 (locales) ──
+
+LOCALES_DIR = os.path.join(os.path.dirname(__file__), "locales")
+LANGUAGES = ["ko", "en", "ja", "zh-CN", "zh-TW", "es", "pt-BR", "ru", "de", "fr"]
+
+
+def _flat(tree, prefix=""):
+    out = {}
+    for key, value in tree.items():
+        out.update(_flat(value, f"{prefix}{key}.") if isinstance(value, dict) else {prefix + key: value})
+    return out
+
+
+def _lines(lang):
+    with open(os.path.join(LOCALES_DIR, f"{lang}.json"), encoding="utf-8") as f:
+        return _flat(json.load(f))
+
+
+def test_every_language_has_the_same_lines_and_placeholders():
+    import re
+    base = _lines("ko")
+    assert base
+    for lang in LANGUAGES:
+        lines = _lines(lang)
+        assert set(lines) == set(base), lang
+        for key, text in lines.items():
+            assert sorted(re.findall(r"\{\{(\w+)\}\}", text)) == sorted(re.findall(r"\{\{(\w+)\}\}", base[key])), (lang, key)
+
+
+@pytest.fixture
+def korean(monkeypatch):
+    """데몬이 SABA_LANG=ko로 부른 실행"""
+    from i18n import I18n
+    monkeypatch.setenv("SABA_LANG", "ko")
+    monkeypatch.setattr(steamcmd_mod, "i18n", I18n(os.path.dirname(steamcmd_mod.__file__)))
+
+
+def test_install_progress_and_result_are_in_the_app_language(fake_steamcmd, korean, monkeypatch):
+    install_with, _ = fake_steamcmd
+    mb = 1_048_576
+    sizes = iter([0, 0, 300 * mb])
+    monkeypatch.setattr(steamcmd_mod, "_dir_size", lambda path: next(sizes, 300 * mb))
+    monkeypatch.setattr(steamcmd_mod, "_KNOWN_APP_SIZES", {380870: 600 * mb})
+    messages = []
+    monkeypatch.setattr(steamcmd_mod, "progress", lambda pct, msg: messages.append(msg))
+    result, _ = install_with(_FakeProc(b"Success! App '380870' fully installed.\n", finish_after=3))
+    assert messages == ["Steam에 연결하는 중...", "서버 파일을 준비하는 중...", "내려받는 중: 300/600 MB", "서버 파일을 설치했습니다"]
+    assert result["message"].startswith("앱 380870")
+
+
+def test_install_failure_names_the_cause_in_the_app_language(fake_steamcmd, korean, monkeypatch):
+    """다시 돌려도 풀리지 않는 원인(디스크 부족 등)은 SteamCMD 원문만이 아니라 무엇을 할지 알린다"""
+    install_with, _ = fake_steamcmd
+    monkeypatch.setattr(steamcmd_mod.time, "sleep", lambda s: None)
+    result, _ = install_with(_FakeProc(b"ERROR! Failed to install app '380870' (Not enough disk space)\n", returncode=8))
+    assert result["success"] is False
+    assert "디스크 공간이 부족합니다" in result["message"]
+    assert "Not enough disk space" in result["message"]
+
+    result, _ = install_with(_FakeProc(b"ERROR! Failed to install app '380870' (Missing configuration)\n", returncode=5))
+    assert result["message"] == "SteamCMD가 실패했습니다 (종료 코드 5): ERROR! Failed to install app '380870' (Missing configuration)"
+
+    result, _ = install_with(_FakeProc(finish_after=None), timeout=0)
+    assert "끝나지 않아" in result["message"] and "timed out" not in result["message"]
+
+
+def test_check_update_failure_is_in_the_app_language(tmp_path, korean):
+    steam = SteamCMD(explicit_path="/fake/steamcmd")
+    with patch.object(type(steam), "available", new_callable=lambda: property(lambda self: False)):
+        result = steam.check_update(app_id=2394010, install_dir=str(tmp_path))
+    assert result["error"] == "SteamCMD를 쓸 수 없습니다"
