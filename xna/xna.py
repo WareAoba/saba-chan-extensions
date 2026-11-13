@@ -28,7 +28,7 @@ import tempfile
 import zlib
 from pathlib import Path
 
-from daemon_rcon import ChecksumMismatch, atomic_write, download
+from daemon_rcon import ChecksumMismatch, atomic_write, download, extension_data_dir
 from i18n import I18n
 
 i18n = I18n(os.path.dirname(os.path.abspath(__file__)))
@@ -99,7 +99,7 @@ def present(target_dir) -> bool:
 def _cache_dir() -> Path:
     """Verified files are kept in this extension's data folder so the next server does not download again.
     The daemon gives the data root (``SABA_EXTENSION_DATA_ROOT``, its own per sandboxed run)."""
-    return Path(os.environ["SABA_EXTENSION_DATA_ROOT"]) / "xna" / VERSION
+    return extension_data_dir("xna") / VERSION
 
 
 def _msi_cabinet(data: bytes) -> bytes:

@@ -178,7 +178,7 @@ def test_check_update_result_structure():
     from extensions.steamcmd.steamcmd import FUNCTIONS
     # This should work without actually running steamcmd (no install_dir)
     result = FUNCTIONS["check_update"]({
-        "app_id": 2394010,
+        "install": {"app_id": 2394010},
         "install_dir": "/nonexistent/dir",
     })
     assert isinstance(result, dict)
@@ -279,13 +279,9 @@ def test_simulate_no_update_needed(tmp_path):
     assert result["remote_buildid"] == "12345678"
 
 
-def test_simulate_plugin_check_update_with_extension_data(tmp_path):
-    """실제 daemon 호출 시나리오: extension_data에서 app_id를 가져오는 플러그인 프로토콜 테스트.
-
-    Rust daemon이 보내는 context에는 extension_data.steamcmd_app_id가 있고,
-    _plugin_check_update는 config["app_id"]를 기대한다.
-    Rust 핸들러가 app_id를 top-level로 펼쳐서 보내야 한다.
-    """
+def test_check_update_reads_the_app_from_the_module_install_values(tmp_path):
+    """데몬이 보내는 context 그대로: 앱 ID는 모듈 module.toml [install](ctx `install`)에서 읽는다.
+    인스턴스 extension_data에 남은 옛 사본(steamcmd_app_id)은 보지 않는다 (saba-core 0.1.14-beta.2)."""
     from extensions.steamcmd.steamcmd import FUNCTIONS
 
     steamapps = tmp_path / "steamapps"
@@ -299,19 +295,15 @@ def test_simulate_plugin_check_update_with_extension_data(tmp_path):
         '}\n'
     )
 
-    # Rust 핸들러가 보내는 것과 동일한 구조 (fix 이후)
     config = {
         "instance_id": "test-instance-123",
         "instance_name": "Test Palworld",
         "module": "palworld",
         "instance_dir": str(tmp_path),
-        "install_dir": str(tmp_path),         # Rust가 top-level로 펼침
-        "app_id": 2394010,                    # Rust가 top-level로 펼침
-        "extension_data": {
-            "install_method_steamcmd": True,
-            "steamcmd_app_id": 2394010,
-            "steamcmd_anonymous": True,
-        },
+        "install_dir": str(tmp_path),
+        "install": {"method": "steamcmd", "app_id": 2394010, "anonymous": True, "download_size": 5_700_000_000},
+        "branch": None,
+        "extension_data": {"install_method_steamcmd": True, "steamcmd_app_id": 111},
     }
 
     result = FUNCTIONS["check_update"](config)
@@ -480,8 +472,8 @@ def test_resolve_manifest_path_layouts(tmp_path):
     assert resolve_manifest_path(str(game), 222) == outer
 
 
-def test_check_update_uses_beta_branch_from_extension_data(tmp_path):
-    """데몬 context의 extension_data.steamcmd_beta가 원격 buildid 브랜치가 된다."""
+def test_check_update_uses_the_branch_the_daemon_gives(tmp_path):
+    """데몬 context의 branch(사용자가 고른 브랜치, 없으면 모듈 [install] beta)가 원격 buildid 브랜치가 된다."""
     steamapps = tmp_path / "steamapps"
     steamapps.mkdir()
     (steamapps / "appmanifest_380870.acf").write_text('"AppState"\n{\n\t"buildid"\t\t"100"\n}\n')
@@ -496,10 +488,10 @@ def test_check_update_uses_beta_branch_from_extension_data(tmp_path):
     exe.write_text("")
     with patch.object(SteamCMD, "_app_info_print", return_value=raw):
         result = steamcmd_mod.FUNCTIONS["check_update"]({
-            "app_id": 380870,
+            "install": {"app_id": 380870},
             "install_dir": str(tmp_path),
             "explicit_path": str(exe),
-            "extension_data": {"steamcmd_beta": "unstable"},
+            "branch": "unstable",
         })
     assert result["remote_buildid"] == "200"
     assert result["update_available"] is True
@@ -507,7 +499,7 @@ def test_check_update_uses_beta_branch_from_extension_data(tmp_path):
 
 def test_check_update_offline_reports_local_only(tmp_path):
     """SteamCMD가 없고 다운로드도 실패하면 로컬 buildid만 보고한다 (네트워크 없음)."""
-    result = steamcmd_mod.FUNCTIONS["check_update"]({"app_id": 1, "install_dir": str(tmp_path)})
+    result = steamcmd_mod.FUNCTIONS["check_update"]({"install": {"app_id": 1}, "install_dir": str(tmp_path)})
     assert result["remote_buildid"] is None
     assert result["update_available"] is False
 
@@ -696,7 +688,7 @@ def test_check_update_flags_a_branch_switch_even_to_an_older_build(tmp_path):
     exe.write_text("")
     with patch.object(SteamCMD, "_app_info_print", return_value=raw):
         result = steamcmd_mod.FUNCTIONS["check_update"]({
-            "app_id": 380870, "install_dir": str(tmp_path), "explicit_path": str(exe),
+            "install": {"app_id": 380870}, "install_dir": str(tmp_path), "explicit_path": str(exe),
         })
     assert result["local_branch"] == "unstable"
     assert result["update_available"] is True
@@ -948,12 +940,12 @@ def test_install_progress_never_goes_back_when_the_manifest_appears(fake_steamcm
 
 
 def test_install_for_module_reads_the_app_from_module_toml(tmp_path):
-    """앱 ID·익명 로그인·베타는 모듈 module.toml [install] 한 곳에서 읽는다 (모듈 코드에 다시 적지 않는다)"""
+    """앱 ID·익명 로그인·베타·받을 크기는 모듈 module.toml [install] 한 곳에서 읽는다 (모듈 코드나 익스텐션에 다시 적지 않는다)"""
     from extensions.steamcmd import install_for_module
     module = tmp_path / "game"
     module.mkdir()
     (module / "module.toml").write_bytes(
-        "﻿[module]\nname = \"g\"\n\n[install]\nmethod = \"steamcmd\"\napp_id = 380870\nanonymous = true\n".encode("utf-8"))
+        "﻿[module]\nname = \"g\"\n\n[install]\nmethod = \"steamcmd\"\napp_id = 380870\nanonymous = true\ndownload_size = 6_300_000_000\n".encode("utf-8"))
     calls = []
     with patch.object(SteamCMD, "ensure_available", lambda self, **k: calls.append("ensure")), \
          patch.object(SteamCMD, "install", lambda self, app_id, install_dir, **k: calls.append((app_id, str(install_dir), k)) or {"success": True}):
@@ -962,6 +954,7 @@ def test_install_for_module_reads_the_app_from_module_toml(tmp_path):
     app_id, target, options = calls[1]
     assert (app_id, target) == (380870, str(tmp_path / "server"))
     assert options["anonymous"] is True and options["beta"] == "unstable"
+    assert options["download_size"] == 6_300_000_000
 
 
 def test_install_for_module_needs_a_steamcmd_app(tmp_path):
@@ -1147,10 +1140,9 @@ def test_install_progress_and_result_are_in_the_app_language(fake_steamcmd, kore
     mb = 1_048_576
     sizes = iter([0, 0, 300 * mb])
     monkeypatch.setattr(steamcmd_mod, "_dir_size", lambda path: next(sizes, 300 * mb))
-    monkeypatch.setattr(steamcmd_mod, "_KNOWN_APP_SIZES", {380870: 600 * mb})
     messages = []
     monkeypatch.setattr(steamcmd_mod, "progress", lambda pct, msg: messages.append(msg))
-    result, _ = install_with(_FakeProc(b"Success! App '380870' fully installed.\n", finish_after=3))
+    result, _ = install_with(_FakeProc(b"Success! App '380870' fully installed.\n", finish_after=3), download_size=600 * mb)
     assert messages == ["Steam에 연결 중...", "서버 파일 준비 중...", "내려받는 중: 300/600 MB", "서버 파일 설치 완료"]
     assert result["message"].startswith("앱 380870")
 
@@ -1188,7 +1180,6 @@ def test_install_walks_a_slow_folder_less_often(fake_steamcmd, monkeypatch):
     monkeypatch.setattr(steamcmd_mod, "_POLL_INTERVAL", 2.0)
     monkeypatch.setattr(steamcmd_mod.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(steamcmd_mod.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + s))
-    monkeypatch.setattr(steamcmd_mod, "_KNOWN_APP_SIZES", {380870: 10_000 * mb})
 
     def slow_walk(path):
         clock[0] += 4
@@ -1198,7 +1189,7 @@ def test_install_walks_a_slow_folder_less_often(fake_steamcmd, monkeypatch):
     monkeypatch.setattr(steamcmd_mod, "_dir_size", slow_walk)
     reported = []
     monkeypatch.setattr(steamcmd_mod, "progress", lambda pct, msg: reported.append((clock[0], pct)))
-    install_with(_FakeProc(finish_after=120))
+    install_with(_FakeProc(finish_after=120), download_size=10_000 * mb)
     assert walking[0] <= clock[0] / 4, (walking[0], clock[0])
     during = reported[:-1]
     assert max(b[0] - a[0] for a, b in zip(during, during[1:])) <= 30, during

@@ -34,7 +34,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from daemon_rcon import download, force_kill, progress, run_lifecycle, safe_extract
+from daemon_rcon import download, extension_data_dir, force_kill, progress, run_lifecycle, safe_extract
 from i18n import I18n
 
 i18n = I18n(os.path.dirname(os.path.abspath(__file__)))
@@ -75,30 +75,6 @@ _POLL_INTERVAL = 2.0
 # 설치 폴더 훑기는 걸린 시간의 이 배수만큼 쉰 뒤에 다시 한다. 파일 수만 개인 서버를 느린 디스크에 받을 때
 # 2초마다 훑으면 훑기가 받기와 디스크를 다툰다 (훑는 시간이 전체의 1/5를 넘지 않게)
 _SCAN_REST = 4
-
-# Approximate download sizes (bytes) for common dedicated server app IDs.
-# Used to estimate download progress when SteamCMD stdout is buffered.
-# Values are rough estimates and will be refined as more data is available.
-_KNOWN_APP_SIZES: dict[int, int] = {
-    # Game Server name                    # Approx download (bytes)
-    90:      3_200_000_000,   # Half-Life Dedicated Server
-    232250:  27_000_000_000,  # Team Fortress 2 DS
-    232330:  35_000_000_000,  # Counter-Strike 2 DS
-    258550:  3_000_000_000,   # Rust DS
-    376030:  12_000_000_000,  # ARK: Survival Evolved DS
-    380870:  6_300_000_000,   # Project Zomboid DS
-    443030:  6_000_000_000,   # Conan Exiles DS
-    530870:  900_000_000,     # Factorio Headless
-    896660:  2_500_000_000,   # Valheim DS
-    1007820: 8_000_000_000,   # Satisfactory DS
-    1026340: 4_200_000_000,   # Enshrouded DS
-    1218040: 2_500_000_000,   # Necesse DS
-    1690800: 3_000_000_000,   # Abiotic Factor DS
-    1829350: 6_000_000_000,   # V Rising DS
-    2278520: 5_000_000_000,   # Core Keeper DS
-    2394010: 5_700_000_000,   # Palworld DS
-    2430930: 800_000_000,     # Soulmask DS
-}
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -197,21 +173,18 @@ def _portable_dir() -> Path:
 
     데몬이 준 ``SABA_EXTENSION_DATA_ROOT/steamcmd`` (격리된 실행은 구성요소마다 다른 뿌리를 받는다).
     """
-    root = os.environ.get("SABA_EXTENSION_DATA_ROOT", "")
-    if not root:
-        raise EnvironmentError("SABA_EXTENSION_DATA_ROOT environment variable not set")
-    return Path(root) / _PORTABLE_SUBDIR
+    return extension_data_dir(_PORTABLE_SUBDIR)
 
 
 _PROGRESS_LINE = re.compile(r"progress:\s*([\d.]+)\s*\((\d+)\s*/\s*(\d+)\)")
 
 
 def _watch_install(proc: subprocess.Popen, app_id: int, install_dir: Path, steamcmd_cache: Path,
-                   initial_size: int, deadline: Optional[float]) -> Optional[str]:
+                   initial_size: int, deadline: Optional[float], download_size: int) -> Optional[str]:
     """steamcmd가 끝날 때까지 진행률을 보고하고 출력 전체를 돌려준다. *deadline* 을 넘기면 None (종료는 부른 쪽이 한다).
 
     *initial_size* 는 시작 전 install_dir(+ steamcmd 캐시) 크기다. 진행률은 출력의 progress 줄 → appmanifest →
-    디스크에 늘어난 크기 순서로 어림한다.
+    디스크에 늘어난 크기 순서로 어림한다. *download_size* 는 모듈이 적은 받을 크기다 (0이면 디스크 크기로 어림하지 않는다).
     """
     # ── SteamCMD stdout을 별도 스레드에서 읽기 ──
     # SteamCMD는 파이프에 full buffering을 사용하여 readline()이
@@ -246,7 +219,7 @@ def _watch_install(proc: subprocess.Popen, app_id: int, install_dir: Path, steam
     last_msg = ""
     last_pct = -1
     heartbeat_counter = 0
-    estimated_total = _KNOWN_APP_SIZES.get(app_id, 0)
+    estimated_total = download_size
     staged_from: Optional[int] = None
     prev_added = 0
     skip_scans = 0
@@ -424,8 +397,12 @@ class SteamCMD:
         platform_override: Optional[str] = None,
         validate: Optional[bool] = None,
         timeout: Optional[float] = _INSTALL_BUDGET,
+        download_size: int = 0,
     ) -> dict[str, Any]:
         """Run ``steamcmd +app_update`` to install or update a game server.
+
+        *download_size* 는 받을 파일의 대략적인 크기(바이트, 모듈 module.toml ``[install] download_size``)다.
+        SteamCMD 출력과 appmanifest에서 크기를 읽지 못하는 동안 늘어난 디스크 크기로 진행률을 어림하는 데 쓴다.
 
         *timeout* 는 재시도와 이 객체의 SteamCMD 받기를 포함한 전체 제한 시간(초)이다. 넘기면 steamcmd를
         종료하고 실패를 반환한다. ``None`` 이면 제한하지 않는다.
@@ -471,7 +448,7 @@ class SteamCMD:
                 stderr=subprocess.STDOUT,
                 creationflags=_creation_flags(),
             )
-            stdout = _watch_install(proc, app_id, install_dir, steamcmd_cache, initial_size, deadline)
+            stdout = _watch_install(proc, app_id, install_dir, steamcmd_cache, initial_size, deadline, download_size)
 
             if stdout is None:
                 # steamcmd.sh는 실제 steamcmd를 자식으로 띄운다: 직계만 끝내면 손자가 남아 install_dir에 계속 쓴다
@@ -978,7 +955,7 @@ def install_for_module(
     beta: Optional[str] = None,
     timeout: Optional[float] = _INSTALL_BUDGET,
 ) -> dict[str, Any]:
-    """모듈 module.toml ``[install]``(``method = "steamcmd"``, ``app_id``, ``anonymous``, ``beta``)대로
+    """모듈 module.toml ``[install]``(``method = "steamcmd"``, ``app_id``, ``anonymous``, ``beta``, ``download_size``)대로
     게임 서버를 설치·업데이트한다. 앱 ID를 모듈 코드에 다시 적지 않게 한다 (선언은 module.toml 한 곳).
 
     SteamCMD가 없으면 받아 온다. 반환은 :meth:`SteamCMD.install` 과 같다.
@@ -999,6 +976,7 @@ def install_for_module(
         anonymous=bool(section.get("anonymous", True)),
         beta=beta or section.get("beta"),
         timeout=timeout,
+        download_size=int(section.get("download_size") or 0),
     )
 
 
@@ -1016,13 +994,13 @@ def _plugin_status(config: dict) -> dict:
 def _plugin_check_update(config: dict) -> dict:
     """server.check_update — buildid 비교로 업데이트 여부를 확인한다.
 
-    브랜치 우선순위: config.branch → extension_data.steamcmd_beta → "public".
+    앱 ID는 데몬이 준 모듈 ``[install]``(config.install), 브랜치는 config.branch(사용자가 고른 브랜치, 없으면
+    모듈 ``[install] beta``)이고 없으면 "public"이다 (saba-core 0.1.14-beta.2).
     """
     steam = SteamCMD(config.get("explicit_path"))
-    app_id = config.get("app_id")
+    app_id = (config.get("install") or {}).get("app_id")
     install_dir = config.get("install_dir", "")
-    ext_data = config.get("extension_data") or {}
-    branch = config.get("branch") or ext_data.get("steamcmd_beta") or "public"
+    branch = config.get("branch") or "public"
 
     if not app_id:
         return {
