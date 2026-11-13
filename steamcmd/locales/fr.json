@@ -6,21 +6,21 @@
     "downloading_unknown": "Téléchargement... ({{done}} Mo)",
     "preparing": "Préparation des fichiers du serveur...",
     "installed": "Fichiers du serveur installés",
-    "install_done": "L'application {{app_id}} a été installée dans {{install_dir}}"
+    "install_done": "Application {{app_id}} installée : {{install_dir}}"
   },
   "errors": {
-    "failed": "SteamCMD a échoué (code de sortie {{code}}) : {{detail}}",
-    "failed_after_retries": "SteamCMD a échoué à chaque tentative",
-    "timed_out": "SteamCMD n'a pas terminé en {{seconds}} s et a été arrêté",
-    "bootstrap_timed_out": "SteamCMD n'a pas pu être téléchargé en {{seconds}} s",
-    "disk_write": "Impossible d'écrire les fichiers dans le dossier d'installation. Vérifiez le disque, le droit d'écriture du dossier et un blocage par l'antivirus. ({{detail}})",
+    "failed": "Échec de SteamCMD (code de sortie {{code}}) : {{detail}}",
+    "failed_after_retries": "SteamCMD en échec après plusieurs tentatives",
+    "timed_out": "SteamCMD arrêté après dépassement du délai ({{seconds}} s)",
+    "bootstrap_timed_out": "Délai dépassé pour le téléchargement de SteamCMD ({{seconds}} s)",
+    "disk_write": "Échec de l'écriture dans le dossier d'installation. Vérifiez le disque, le droit d'écriture du dossier et un blocage par l'antivirus. ({{detail}})",
     "disk_space": "Espace disque insuffisant. Libérez de l'espace sur le disque d'installation, puis réessayez. ({{detail}})",
-    "invalid_platform": "Steam ne propose pas de fichiers serveur pour ce système d'exploitation. ({{detail}})",
-    "no_subscription": "Ces fichiers serveur ne peuvent pas être téléchargés avec une connexion anonyme. Ce serveur nécessite un compte Steam qui possède le jeu. ({{detail}})",
-    "unavailable": "SteamCMD n'est pas disponible",
+    "invalid_platform": "Steam ne fournit pas de fichiers serveur pour ce système d'exploitation ({{detail}})",
+    "no_subscription": "Fichiers serveur indisponibles via une connexion anonyme. Un compte Steam possédant le jeu est requis. ({{detail}})",
+    "unavailable": "SteamCMD indisponible",
     "no_buildid": "SteamCMD n'a pas indiqué le numéro de build de la branche '{{branch}}'",
-    "app_info_empty": "SteamCMD n'a renvoyé aucune information sur l'application",
-    "app_info_failed": "Impossible de lire les informations de l'application depuis SteamCMD : {{error}}",
-    "app_id_required": "L'ID d'application Steam est manquant"
+    "app_info_empty": "Aucune information d'application de SteamCMD",
+    "app_info_failed": "Échec de la lecture des informations d'application de SteamCMD : {{error}}",
+    "app_id_required": "ID d'application Steam manquant"
   }
 }

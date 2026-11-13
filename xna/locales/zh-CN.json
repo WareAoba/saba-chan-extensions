@@ -1,11 +1,11 @@
 {
   "errors": {
-    "bad_installer": "无法读取 XNA 安装程序：{{error}}",
-    "temp_write_failed": "无法在服务器文件夹中写入临时文件：{{error}}",
-    "not_official": "下载的 XNA 安装程序不是官方文件",
-    "download_failed": "XNA 下载失败：{{error}}",
-    "read_failed": "无法打开下载的 XNA 安装程序：{{error}}",
-    "file_mismatch": "XNA 安装程序中的 {{name}} 不是预期的文件",
-    "write_failed": "无法将 XNA 文件写入服务器文件夹：{{error}}"
+    "bad_installer": "读取 XNA 安装文件失败:{{error}}",
+    "temp_write_failed": "向服务器文件夹写入临时文件失败:{{error}}",
+    "not_official": "下载的 XNA 安装文件与官方文件不符",
+    "download_failed": "XNA 下载失败:{{error}}",
+    "read_failed": "打开下载的 XNA 安装文件失败:{{error}}",
+    "file_mismatch": "XNA 安装文件中的 {{name}} 与预期文件不符",
+    "write_failed": "向服务器文件夹写入 XNA 文件失败:{{error}}"
   }
 }

@@ -27,7 +27,7 @@ def test_every_language_has_the_same_lines_and_placeholders():
 
 
 @pytest.mark.parametrize("lang, expected", [
-    ("ko", "XNA를 내려받지 못했습니다: Connection refused"),
+    ("ko", "XNA 내려받기 실패: Connection refused"),
     (None, "XNA download failed: Connection refused"),
 ])
 def test_install_failure_is_in_the_app_language(tmp_path, monkeypatch, lang, expected):

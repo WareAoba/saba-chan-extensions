@@ -1,11 +1,11 @@
 {
   "errors": {
-    "bad_installer": "Impossible de lire le programme d'installation XNA : {{error}}",
-    "temp_write_failed": "Impossible d'écrire un fichier temporaire dans le dossier du serveur : {{error}}",
-    "not_official": "Le programme d'installation XNA téléchargé n'est pas le fichier officiel",
+    "bad_installer": "Échec de la lecture du programme d'installation XNA : {{error}}",
+    "temp_write_failed": "Échec de l'écriture du fichier temporaire dans le dossier du serveur : {{error}}",
+    "not_official": "Le programme d'installation XNA téléchargé diffère du fichier officiel",
     "download_failed": "Échec du téléchargement de XNA : {{error}}",
-    "read_failed": "Impossible d'ouvrir le programme d'installation XNA téléchargé : {{error}}",
-    "file_mismatch": "{{name}} dans le programme d'installation XNA n'est pas le fichier attendu",
-    "write_failed": "Impossible d'écrire les fichiers XNA dans le dossier du serveur : {{error}}"
+    "read_failed": "Échec de l'ouverture du programme d'installation XNA téléchargé : {{error}}",
+    "file_mismatch": "{{name}} dans le programme d'installation XNA diffère du fichier attendu",
+    "write_failed": "Échec de l'écriture des fichiers XNA dans le dossier du serveur : {{error}}"
   }
 }

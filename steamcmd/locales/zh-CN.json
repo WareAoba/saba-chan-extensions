@@ -5,22 +5,22 @@
     "downloading_percent": "正在下载：{{done}}/{{total}} MB ({{percent}}%)",
     "downloading_unknown": "正在下载...（{{done}} MB）",
     "preparing": "正在准备服务器文件...",
-    "installed": "服务器文件已安装",
-    "install_done": "已将应用 {{app_id}} 安装到 {{install_dir}}"
+    "installed": "服务器文件安装完成",
+    "install_done": "应用 {{app_id}} 安装完成:{{install_dir}}"
   },
   "errors": {
-    "failed": "SteamCMD 失败（退出代码 {{code}}）：{{detail}}",
-    "failed_after_retries": "SteamCMD 多次重试后仍然失败",
-    "timed_out": "SteamCMD 在 {{seconds}} 秒内未完成，已中止",
-    "bootstrap_timed_out": "未能在 {{seconds}} 秒内下载 SteamCMD",
-    "disk_write": "无法向安装文件夹写入文件。请检查磁盘状态、文件夹写入权限和杀毒软件拦截。（{{detail}}）",
-    "disk_space": "磁盘空间不足。请释放安装磁盘的空间后重试。（{{detail}}）",
-    "invalid_platform": "Steam 没有提供适用于此操作系统的服务器文件。（{{detail}}）",
-    "no_subscription": "匿名登录无法下载这些服务器文件。此服务器需要拥有该游戏的 Steam 账号。（{{detail}}）",
+    "failed": "SteamCMD 失败(退出码 {{code}}):{{detail}}",
+    "failed_after_retries": "SteamCMD 重试后仍失败",
+    "timed_out": "SteamCMD 超时({{seconds}} 秒),已中止",
+    "bootstrap_timed_out": "SteamCMD 下载超时({{seconds}} 秒)",
+    "disk_write": "向安装文件夹写入文件失败。请检查驱动器状态、文件夹写入权限和杀毒软件拦截。({{detail}})",
+    "disk_space": "磁盘空间不足。请增加安装盘的可用空间后重试。({{detail}})",
+    "invalid_platform": "Steam 不提供适用于此操作系统的服务器文件({{detail}})",
+    "no_subscription": "匿名登录无法获取这些服务器文件。需要拥有该游戏的 Steam 账号。({{detail}})",
     "unavailable": "SteamCMD 不可用",
-    "no_buildid": "SteamCMD 没有返回分支“{{branch}}”的构建编号",
-    "app_info_empty": "SteamCMD 没有返回应用信息",
-    "app_info_failed": "无法从 SteamCMD 读取应用信息：{{error}}",
-    "app_id_required": "缺少 Steam 应用 ID"
+    "no_buildid": "SteamCMD 未返回“{{branch}}”分支的构建号",
+    "app_info_empty": "没有 SteamCMD 应用信息",
+    "app_info_failed": "读取 SteamCMD 应用信息失败:{{error}}",
+    "app_id_required": "没有 Steam 应用 ID"
   }
 }

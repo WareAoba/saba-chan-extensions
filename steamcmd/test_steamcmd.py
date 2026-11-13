@@ -1175,7 +1175,7 @@ def test_install_progress_and_result_are_in_the_app_language(fake_steamcmd, kore
     messages = []
     monkeypatch.setattr(steamcmd_mod, "progress", lambda pct, msg: messages.append(msg))
     result, _ = install_with(_FakeProc(b"Success! App '380870' fully installed.\n", finish_after=3))
-    assert messages == ["Steam에 연결하는 중...", "서버 파일을 준비하는 중...", "내려받는 중: 300/600 MB", "서버 파일을 설치했습니다"]
+    assert messages == ["Steam에 연결 중...", "서버 파일 준비 중...", "내려받는 중: 300/600 MB", "서버 파일 설치 완료"]
     assert result["message"].startswith("앱 380870")
 
 
@@ -1185,21 +1185,21 @@ def test_install_failure_names_the_cause_in_the_app_language(fake_steamcmd, kore
     monkeypatch.setattr(steamcmd_mod.time, "sleep", lambda s: None)
     result, _ = install_with(_FakeProc(b"ERROR! Failed to install app '380870' (Not enough disk space)\n", returncode=8))
     assert result["success"] is False
-    assert "디스크 공간이 부족합니다" in result["message"]
+    assert "디스크 공간 부족" in result["message"]
     assert "Not enough disk space" in result["message"]
 
     result, _ = install_with(_FakeProc(b"ERROR! Failed to install app '380870' (Missing configuration)\n", returncode=5))
-    assert result["message"] == "SteamCMD가 실패했습니다 (종료 코드 5): ERROR! Failed to install app '380870' (Missing configuration)"
+    assert result["message"] == "SteamCMD 실패 (종료 코드 5): ERROR! Failed to install app '380870' (Missing configuration)"
 
     result, _ = install_with(_FakeProc(finish_after=None), timeout=0)
-    assert "끝나지 않아" in result["message"] and "timed out" not in result["message"]
+    assert "시간 초과" in result["message"] and "timed out" not in result["message"]
 
 
 def test_check_update_failure_is_in_the_app_language(tmp_path, korean):
     steam = SteamCMD(explicit_path="/fake/steamcmd")
     with patch.object(type(steam), "available", new_callable=lambda: property(lambda self: False)):
         result = steam.check_update(app_id=2394010, install_dir=str(tmp_path))
-    assert result["error"] == "SteamCMD를 쓸 수 없습니다"
+    assert result["error"] == "SteamCMD 사용 불가"
 
 
 def test_install_walks_a_slow_folder_less_often(fake_steamcmd, monkeypatch):

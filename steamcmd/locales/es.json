@@ -6,21 +6,21 @@
     "downloading_unknown": "Descargando... ({{done}} MB)",
     "preparing": "Preparando los archivos del servidor...",
     "installed": "Archivos del servidor instalados",
-    "install_done": "La aplicación {{app_id}} se instaló en {{install_dir}}"
+    "install_done": "Aplicación {{app_id}} instalada en {{install_dir}}"
   },
   "errors": {
-    "failed": "SteamCMD falló (código de salida {{code}}): {{detail}}",
-    "failed_after_retries": "SteamCMD falló en todos los intentos",
-    "timed_out": "SteamCMD no terminó en {{seconds}} s y se detuvo",
-    "bootstrap_timed_out": "SteamCMD no se descargó en {{seconds}} s",
-    "disk_write": "No se pudieron escribir archivos en la carpeta de instalación. Revisa la unidad, el permiso de escritura de la carpeta y el bloqueo del antivirus. ({{detail}})",
-    "disk_space": "No hay espacio suficiente en el disco. Libera espacio en la unidad de instalación y vuelve a intentarlo. ({{detail}})",
-    "invalid_platform": "Steam no ofrece archivos de servidor para este sistema operativo. ({{detail}})",
-    "no_subscription": "Estos archivos de servidor no se pueden descargar con inicio de sesión anónimo. Este servidor necesita una cuenta de Steam que tenga el juego. ({{detail}})",
-    "unavailable": "SteamCMD no está disponible",
-    "no_buildid": "SteamCMD no informó el número de compilación de la rama '{{branch}}'",
-    "app_info_empty": "SteamCMD no devolvió la información de la aplicación",
-    "app_info_failed": "No se pudo leer la información de la aplicación desde SteamCMD: {{error}}",
+    "failed": "Error de SteamCMD (código de salida {{code}}): {{detail}}",
+    "failed_after_retries": "SteamCMD sigue fallando tras los reintentos",
+    "timed_out": "SteamCMD detenido por tiempo agotado ({{seconds}} s)",
+    "bootstrap_timed_out": "Tiempo de descarga de SteamCMD agotado ({{seconds}} s)",
+    "disk_write": "Error al escribir en la carpeta de instalación. Comprueba la unidad, el permiso de escritura de la carpeta y el bloqueo del antivirus. ({{detail}})",
+    "disk_space": "Espacio en disco insuficiente. Libera espacio en la unidad de instalación y vuelve a intentarlo. ({{detail}})",
+    "invalid_platform": "Steam no ofrece archivos de servidor para este sistema operativo ({{detail}})",
+    "no_subscription": "Archivos de servidor no descargables con inicio de sesión anónimo. Se necesita una cuenta de Steam que tenga el juego. ({{detail}})",
+    "unavailable": "SteamCMD no disponible",
+    "no_buildid": "SteamCMD no devolvió el número de compilación de la rama '{{branch}}'",
+    "app_info_empty": "Sin información de la aplicación de SteamCMD",
+    "app_info_failed": "Error al leer la información de la aplicación de SteamCMD: {{error}}",
     "app_id_required": "Falta el ID de aplicación de Steam"
   }
 }
