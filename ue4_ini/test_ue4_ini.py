@@ -4,10 +4,7 @@
 """
 import json
 import os
-import subprocess
-import sys
 import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -294,7 +291,7 @@ def test_files_saved_in_the_windows_locale_or_utf16_are_read_and_kept(tmp_path, 
 
 
 def test_a_failed_write_leaves_the_old_file_whole(tmp_path, monkeypatch):
-    """쓰기는 임시 파일에 한 뒤 바꾼다: 중간에 실패해도 원래 파일이 비지 않는다"""
+    """저장이 실패하면 False를 돌려주고 원래 파일은 그대로다 (교체·제자리 쓰기 규칙은 데몬 atomic_write 시험이 본다)"""
     ini = tmp_path / "PalWorldSettings.ini"
     ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName="old")\n', encoding="utf-8")
 
@@ -302,7 +299,7 @@ def test_a_failed_write_leaves_the_old_file_whole(tmp_path, monkeypatch):
         raise OSError("disk full")
 
     from extensions.ue4_ini import ue4_ini
-    monkeypatch.setattr(ue4_ini, "_replace_file", broken)
+    monkeypatch.setattr(ue4_ini, "atomic_write", broken)
     assert write_option_settings(str(ini), {"ServerName": "new"}) is False
     assert parse_option_settings(str(ini))["ServerName"] == "old"
     assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"], "no temp file is left"
@@ -316,57 +313,6 @@ def test_a_write_keeps_the_file_permissions(tmp_path):
     os.chmod(ini, 0o600)
     assert write_option_settings(str(ini), {"AdminPassword": "y"})
     assert ini.stat().st_mode & 0o777 == 0o600
-
-
-def test_windows_replaces_an_existing_file_with_replacefilew(tmp_path, monkeypatch):
-    """Windows에서 기존 파일은 ReplaceFileW로 바꾼다: 원래 파일의 DACL을 지킨다
-    (learn.microsoft.com ReplaceFileW Remarks). os.replace는 임시 파일의 상속 권한을 그대로 남겨 접근을 넓혔다 (외부 감사 P2)"""
-    from extensions.ue4_ini import ue4_ini
-    ini = tmp_path / "PalWorldSettings.ini"
-    ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
-    calls = []
-
-    def fake_replacefile(replaced, replacement, backup, flags, exclude, reserved):
-        calls.append((replaced, os.path.basename(replacement), os.path.basename(backup), flags))
-        os.replace(replaced, backup)  # 파일 내용만 흉내 낸다
-        os.replace(replacement, replaced)
-        return 1
-    monkeypatch.setattr(ue4_ini.os, "name", "nt")
-    monkeypatch.setattr(ue4_ini, "_replacefilew", lambda: fake_replacefile)
-    assert write_option_settings(str(ini), {"AdminPassword": "y"})
-    # 플래그 0: ACL을 옮기지 못하면 성공으로 넘어가지 않는다(IGNORE_*_ERRORS를 쓰지 않는다)
-    assert len(calls) == 1
-    replaced, replacement, backup, flags = calls[0]
-    assert (replaced, flags) == (os.path.realpath(ini), 0)
-    # 임시 파일은 저장마다 다른 이름 (남은 임시 파일이나 다른 저장의 것을 덮지 않게).
-    # 백업 이름은 하나로 둔다: 끊긴 교체를 다음 저장이 그 이름으로 찾아 되돌린다
-    assert replacement.startswith("PalWorldSettings.ini.") and replacement.endswith(".saba-tmp")
-    assert replacement != "PalWorldSettings.ini.saba-tmp"
-    assert backup == "PalWorldSettings.ini.saba-bak"
-    assert parse_option_settings(str(ini))["AdminPassword"] == "y"
-    assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"], "백업을 남기지 않는다"
-
-
-def test_a_failed_replacefilew_keeps_the_original_file_and_its_acl(tmp_path, monkeypatch):
-    """ReplaceFileW가 중간에 실패해도 임시 파일(상속 ACL)이 설정 파일 자리에 가지 않는다. 원래 파일이 백업 이름으로
-    옮겨졌으면(1177) 되돌린다 (learn.microsoft.com ReplaceFileW Return value, PR #11 리뷰)"""
-    from extensions.ue4_ini import ue4_ini
-    ini = tmp_path / "PalWorldSettings.ini"
-    monkeypatch.setattr(ue4_ini.os, "name", "nt")
-
-    for code in (1175, 1176, 1177):
-        ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
-
-        def fake_replacefile(replaced, replacement, backup, flags, exclude, reserved, code=code):
-            if code == 1177:  # 원래 파일은 백업 이름으로, 새 파일은 임시 이름 그대로
-                os.replace(replaced, backup)
-            return 0
-        monkeypatch.setattr(ue4_ini, "_replacefilew", lambda f=fake_replacefile: f)
-        monkeypatch.setattr(ue4_ini, "_last_error", lambda code=code: code)
-        monkeypatch.setattr(ue4_ini, "_winerror", lambda err: OSError(err, "replace failed"))
-        assert write_option_settings(str(ini), {"AdminPassword": "y"}) is False, code
-        assert parse_option_settings(str(ini))["AdminPassword"] == "x", code
-        assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"], code
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows ACL")
@@ -412,60 +358,6 @@ def test_a_write_first_restores_a_backup_left_by_an_interrupted_replace(tmp_path
     assert "[Other]\nKept=1" in ini.read_text(encoding="utf-8")
     assert parse_option_settings(str(ini))["AdminPassword"] == "y"
     assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"]
-
-
-def test_an_access_denied_replace_falls_back_only_for_a_file_with_the_same_access(tmp_path, monkeypatch):
-    """격리 실행은 DACL을 옮길 권한이 없어 ReplaceFileW가 거부된다(5). 원래 파일과 임시 파일이 같은 폴더 권한만 물려받았으면
-    바꿔도 권한이 넓어지지 않으므로 os.replace로 바꾼다. 상속 표시의 자동 상속 플래그(AI)만 다른 것은 같은 권한이다.
-    권한이 다르면(PC 실측: 격리된 팰월드 저장이 매번 실패했다) 원래 파일에 제자리로 써서 권한·무결성 표시를 그대로 둔다"""
-    from extensions.ue4_ini import ue4_ini
-    ini = tmp_path / "PalWorldSettings.ini"
-    monkeypatch.setattr(ue4_ini.os, "name", "nt")
-    monkeypatch.setattr(ue4_ini, "_replacefilew", lambda: (lambda *args: 0))
-    monkeypatch.setattr(ue4_ini, "_last_error", lambda: 5)
-    monkeypatch.setattr(ue4_ini, "_winerror", lambda err: PermissionError(13, f"WinError {err}"))
-    monkeypatch.setattr(ue4_ini, "_encrypted", lambda path: False)
-    original = "O:BAD:AI(A;ID;FA;;;SY)S:(ML;ID;NW;;;LW)"
-
-    for temp, in_place in (("O:BAD:AI(A;ID;FA;;;SY)S:AI(ML;ID;NW;;;LW)", False), ("O:BAD:AI(A;ID;FA;;;WD)S:AI(ML;ID;NW;;;LW)", True)):
-        ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
-        inode = ini.stat().st_ino
-        monkeypatch.setattr(ue4_ini, "_access_of", lambda path, temp=temp: original if path.endswith(".ini") else temp)
-        assert write_option_settings(str(ini), {"AdminPassword": "y"}) is True
-        assert parse_option_settings(str(ini))["AdminPassword"] == "y"
-        assert (ini.stat().st_ino == inode) is in_place
-        assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"]
-
-
-def test_a_folder_without_create_rights_is_written_in_place(tmp_path, monkeypatch):
-    from extensions.ue4_ini import ue4_ini
-    ini = tmp_path / "PalWorldSettings.ini"
-    ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
-    monkeypatch.setattr(ue4_ini.tempfile, "mkstemp", lambda *a, **k: (_ for _ in ()).throw(PermissionError(13, "denied")))
-    assert write_option_settings(str(ini), {"AdminPassword": "y"}) is True
-    assert parse_option_settings(str(ini))["AdminPassword"] == "y"
-
-
-@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="RLIMIT_FSIZE")
-def test_a_failed_in_place_write_restores_the_original(tmp_path):
-    """제자리 쓰기가 디스크·크기 제한으로 실패해도 원래 내용이 남는다 (실패한 쓰기 버퍼를 다시 내보내지 않는다)"""
-    from extensions.ue4_ini import ue4_ini
-    ini = tmp_path / "PalWorldSettings.ini"
-    ini.write_bytes(b"original")
-    folder = str(Path(ue4_ini.__file__).parent)
-    script = (
-        f"import sys, signal, resource; sys.path.insert(0, {folder!r})\n"
-        "import ue4_ini\n"
-        "signal.signal(signal.SIGXFSZ, signal.SIG_IGN)\n"
-        "resource.setrlimit(resource.RLIMIT_FSIZE, (16, 16))\n"
-        "try:\n"
-        f"    ue4_ini._overwrite_in_place({str(ini)!r}, b'X' * 32)\n"
-        "except OSError:\n"
-        "    print('failed')\n"
-    )
-    out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30)
-    assert "failed" in out.stdout, out.stderr
-    assert ini.read_bytes() == b"original"
 
 
 def test_keys_declared_as_strings_stay_quoted_even_when_the_value_looks_like_a_number(tmp_path):
