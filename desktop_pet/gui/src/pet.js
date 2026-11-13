@@ -340,6 +340,8 @@ function Pet(props) {
     }
     if (sheets[view.scene]) drawn.current = { scene: view.scene, frame: frame };
     var shown = drawn.current;
+    // 첫 그림이 오기 전이고 말풍선도 없으면 아무것도 내지 않는다: 크기가 0이어야 오버레이 창이 숨은 채로 있다
+    if (!shown && !view.bubbles.length) return null;
 
     return h(
         'div',

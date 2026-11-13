@@ -371,3 +371,91 @@ def test_working_dots_blink_in_the_colour_of_the_state_being_left():
         "install": ["bubble.installing", "stopped"],
         "scheduled": ["bubble.schedule_stop", "running"],
     }
+
+
+# 번들(pet.js)을 앱 없이 돌린다: 훅만 흉내 낸 React로 Pet을 그리고, 그린 결과(요소 나무)를 본다.
+# 타이머는 돌리지 않으므로 장면은 시험이 부른 일로만 바뀐다
+PET = """
+const vm = require('vm');
+const fs = require('fs');
+let now = 1.7e12;
+const hooks = [];
+let hi = 0;
+let effects = [];
+const React = {
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children }),
+    useRef: (v) => { const i = hi++; if (!(i in hooks)) hooks[i] = { current: v }; return hooks[i]; },
+    useState: (v) => { const i = hi++; if (!(i in hooks)) hooks[i] = v; return [hooks[i], (x) => { hooks[i] = x; }]; },
+    useEffect: (fn) => { hi++; effects.push(fn); },
+    useLayoutEffect: (fn) => { hi++; effects.push(fn); },
+};
+class FakeDate extends Date {}
+FakeDate.now = () => now;
+const window = { React };
+vm.runInNewContext(fs.readFileSync(BUNDLE, 'utf8'), {
+    window, Date: FakeDate, Math, Promise, JSON, Object,
+    setTimeout: () => 0, clearTimeout: () => {},
+    Image: class { decode() { return Promise.resolve(); } },
+});
+const Pet = window.SabaExtDesktopPet.registerSlots()['Desktop.overlay'];
+const asks = [];
+let emit = null;
+const host = {
+    t: (k) => k, on: (_type, fn) => { emit = fn; return () => {}; }, servers: () => [], openApp: () => {},
+    assetUrl: (file) => new Promise((resolve) => asks.push({ file, resolve })),
+};
+let out = null;
+const render = () => { hi = 0; effects = []; out = Pet({ host }); effects.forEach((f) => f()); return out; };
+const settle = () => new Promise((r) => setImmediate(r));
+const drawn = () => {
+    if (!out) return null;
+    const s = out.children.find((c) => c && c.props && c.props.scene !== undefined);
+    return s ? s.props.scene : 'none';
+};
+const asked = () => asks.map((a) => a.file);
+"""
+
+
+@needs_node
+def test_a_scene_picture_is_fetched_when_the_scene_first_shows_and_the_last_one_stays_meanwhile():
+    """스프라이트는 장면이 처음 나올 때 앱에서 받는다(host.assetUrl). 받기 전에는 앞서 그린 칸을 두고,
+    처음 그림이 오기 전에는 아무것도 내지 않아 오버레이 창이 숨은 채로 있다. 받지 못하면 5초 뒤 다시 받는다"""
+    bundle = json.dumps(str(GUI / "dist" / "desktop-pet.js"))
+    r = run_node(
+        f"const BUNDLE = {bundle};\n"
+        + PET
+        + """
+        (async () => {
+            const r = {};
+            render();
+            r.first = { drawn: drawn(), asked: asked() };
+            asks[0].resolve('blob:idle');
+            await settle();
+            render();
+            r.idle = drawn();
+            emit({ instanceId: 'a', instance: 'x', kind: 'crash', restartInSecs: null }, 'instance.exit');
+            render();
+            r.collapsing = { drawn: drawn(), asked: asked() };
+            asks[1].resolve(null);
+            await settle();
+            render();
+            r.failed = { drawn: drawn(), asked: asked().length };
+            now += 5000;
+            render();
+            r.retried = asked();
+            asks[2].resolve('blob:collapse');
+            await settle();
+            render();
+            r.collapse = drawn();
+            console.log(JSON.stringify(r));
+        })();
+        """
+    )
+    assert r == {
+        "first": {"drawn": None, "asked": ["idle.webp"]},
+        "idle": "idle",
+        "collapsing": {"drawn": "idle", "asked": ["idle.webp", "collapse.webp"]},
+        "failed": {"drawn": "idle", "asked": 2},
+        "retried": ["idle.webp", "collapse.webp", "collapse.webp"],
+        "collapse": "collapse",
+    }
