@@ -1,11 +1,11 @@
 {
   "errors": {
-    "bad_installer": "XNA インストーラーを読み取れませんでした: {{error}}",
-    "temp_write_failed": "サーバーフォルダーに一時ファイルを書き込めませんでした: {{error}}",
-    "not_official": "ダウンロードした XNA インストーラーが公式ファイルと一致しません",
-    "download_failed": "XNA をダウンロードできませんでした: {{error}}",
+    "bad_installer": "XNA インストーラーの読み込み失敗: {{error}}",
+    "temp_write_failed": "サーバーフォルダーへの一時ファイルの書き込み失敗: {{error}}",
+    "not_official": "ダウンロードした XNA インストーラーが公式ファイルと異なります",
+    "download_failed": "XNA のダウンロード失敗: {{error}}",
     "read_failed": "ダウンロードした XNA インストーラーを開けませんでした: {{error}}",
-    "file_mismatch": "XNA インストーラー内の {{name}} が想定したファイルと一致しません",
-    "write_failed": "サーバーフォルダーに XNA ファイルを書き込めませんでした: {{error}}"
+    "file_mismatch": "XNA インストーラー内の {{name}} が想定したファイルと異なります",
+    "write_failed": "サーバーフォルダーへの XNA ファイルの書き込み失敗: {{error}}"
   }
 }

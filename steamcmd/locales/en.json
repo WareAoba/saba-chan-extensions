@@ -5,22 +5,22 @@
     "downloading_percent": "Downloading: {{done}}/{{total}} MB ({{percent}}%)",
     "downloading_unknown": "Downloading... ({{done}} MB)",
     "preparing": "Preparing server files...",
-    "installed": "Server files installed successfully",
-    "install_done": "Successfully installed app {{app_id}} to {{install_dir}}"
+    "installed": "Server files installed",
+    "install_done": "App {{app_id}} installed: {{install_dir}}"
   },
   "errors": {
     "failed": "SteamCMD failed (exit code {{code}}): {{detail}}",
-    "failed_after_retries": "SteamCMD failed after all attempts",
-    "timed_out": "SteamCMD timed out after {{seconds}} s",
-    "bootstrap_timed_out": "SteamCMD download did not finish within {{seconds}}s",
-    "disk_write": "Could not write files to the install folder. Check the drive, the folder's write permission and antivirus blocking. ({{detail}})",
+    "failed_after_retries": "SteamCMD failed after retries",
+    "timed_out": "SteamCMD timed out ({{seconds}} s) and was stopped",
+    "bootstrap_timed_out": "SteamCMD download timed out ({{seconds}} s)",
+    "disk_write": "Writing files to the install folder failed. Check the drive, folder write permission and antivirus blocking. ({{detail}})",
     "disk_space": "Not enough disk space. Free up space on the install drive and try again. ({{detail}})",
-    "invalid_platform": "Steam has no server files for this operating system. ({{detail}})",
-    "no_subscription": "These server files cannot be downloaded with an anonymous login. This server needs a Steam account that owns the game. ({{detail}})",
-    "unavailable": "SteamCMD is not available",
-    "no_buildid": "SteamCMD did not report a buildid for branch '{{branch}}'",
-    "app_info_empty": "SteamCMD app_info_print returned no output",
-    "app_info_failed": "SteamCMD app_info_print failed: {{error}}",
-    "app_id_required": "app_id is required"
+    "invalid_platform": "Steam has no server files for this operating system ({{detail}})",
+    "no_subscription": "Server files not downloadable with an anonymous login. A Steam account that owns the game is required. ({{detail}})",
+    "unavailable": "SteamCMD unavailable",
+    "no_buildid": "SteamCMD returned no build ID for branch '{{branch}}'",
+    "app_info_empty": "No SteamCMD app info",
+    "app_info_failed": "SteamCMD app info read failed: {{error}}",
+    "app_id_required": "No Steam app ID"
   }
 }
