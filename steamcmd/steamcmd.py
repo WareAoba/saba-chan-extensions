@@ -22,23 +22,19 @@ Daemon hook (server.check_update):
 
 from __future__ import annotations
 
-import io
 import os
 import platform
 import re
-import shutil
 import stat
 import subprocess
 import sys
-import tarfile
 import tempfile
 import threading
 import time
-import zipfile
 from pathlib import Path
 from typing import Any, Optional
 
-from daemon_rcon import download, progress, run_lifecycle
+from daemon_rcon import download, force_kill, progress, run_lifecycle, safe_extract
 from i18n import I18n
 
 i18n = I18n(os.path.dirname(os.path.abspath(__file__)))
@@ -276,7 +272,7 @@ class SteamCMD:
 
         portable.mkdir(parents=True, exist_ok=True)
 
-        # 받은 압축은 portable 옆 임시 파일에 두고 읽은 뒤 지운다 (mkdtemp 폴더는 격리 실행이 쓰지 못한다)
+        # 받은 압축은 portable 옆 임시 파일에 두고 푼 뒤 지운다 (mkdtemp 폴더는 격리 실행이 쓰지 못한다)
         fd, archive = tempfile.mkstemp(prefix=".steamcmd-", suffix=".download", dir=portable.parent)
         os.close(fd)
         try:
@@ -285,14 +281,18 @@ class SteamCMD:
                 _download_archive(url, archive, timeout=timeout)
             finally:
                 self._bootstrap_secs += time.monotonic() - started
-            data = Path(archive).read_bytes()
+            _log(f"Downloaded {os.path.getsize(archive) / 1_048_576:.1f} MB, extracting …")
+            try:
+                safe_extract(archive, portable)
+            except BaseException:
+                # 실행 파일이 있으면 다 받은 것으로 본다: 반쯤 풀린 채 남기지 않는다 (다음 호출이 다시 받는다)
+                exe_path.unlink(missing_ok=True)
+                raise
         finally:
             try:
                 os.remove(archive)
             except OSError:
                 pass
-        _log(f"Downloaded {len(data) / 1_048_576:.1f} MB, extracting …")
-        _extract_archive(data, url, portable)
 
         if not exe_path.exists():
             raise FileNotFoundError(
@@ -490,7 +490,9 @@ class SteamCMD:
                     heartbeat_counter = 0
 
             if timed_out:
-                _kill_tree(proc)
+                # steamcmd.sh는 실제 steamcmd를 자식으로 띄운다: 직계만 끝내면 손자가 남아 install_dir에 계속 쓴다
+                force_kill(proc.pid)
+                proc.kill()
                 proc.wait(timeout=10)
                 _log(f"SteamCMD timed out after {timeout} s for app {app_id}; process killed")
                 return {
@@ -915,70 +917,6 @@ def _creation_flags() -> int:
     return 0
 
 
-def _children_map() -> dict[int, list[int]]:
-    """부모 pid → 자식 pid. Linux는 /proc에서 바로 읽고, 없으면(macOS) ps를 쓴다."""
-    pairs: list[tuple[int, int]] = []
-    if os.path.isdir("/proc"):
-        for entry in os.listdir("/proc"):
-            if not entry.isdigit():
-                continue
-            try:
-                with open(f"/proc/{entry}/stat", encoding="utf-8", errors="replace") as f:
-                    # comm에 공백·괄호가 들어갈 수 있어 마지막 ')' 뒤에서 읽는다: state ppid ...
-                    ppid = int(f.read().rsplit(")", 1)[1].split()[1])
-            except (OSError, ValueError, IndexError):
-                continue
-            pairs.append((ppid, int(entry)))
-    else:
-        try:
-            out = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, timeout=5).stdout
-        except (OSError, subprocess.SubprocessError):
-            out = ""
-        for line in out.splitlines():
-            parts = line.split()
-            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                pairs.append((int(parts[1]), int(parts[0])))
-    children: dict[int, list[int]] = {}
-    for ppid, pid in pairs:
-        children.setdefault(ppid, []).append(pid)
-    return children
-
-
-def _descendants(pid: int) -> list[int]:
-    """*pid* 아래 모든 자손 pid (POSIX)."""
-    children = _children_map()
-    found: list[int] = []
-    queue = [pid]
-    while queue:
-        kids = children.get(queue.pop(), [])
-        found.extend(kids)
-        queue.extend(kids)
-    return found
-
-
-def _kill_tree(proc: subprocess.Popen) -> None:
-    """steamcmd와 그 자손을 모두 끝낸다.
-
-    Linux/macOS의 steamcmd.sh는 실제 steamcmd를 자식으로 띄우므로 직계 자식만 죽이면
-    손자가 남아 install_dir에 계속 쓴다. 데몬의 프로세스 그룹 종료가 닿도록 새 세션은 만들지 않는다.
-    """
-    if _SYSTEM == "Windows":
-        try:
-            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-                           capture_output=True, timeout=10, creationflags=_creation_flags())
-        except (OSError, subprocess.SubprocessError):
-            pass
-        proc.kill()
-        return
-    descendants = _descendants(proc.pid)
-    proc.kill()
-    for pid in descendants:
-        try:
-            os.kill(pid, 9)
-        except OSError:
-            pass
-
-
 def _download_archive(url: str, dest: str, *, timeout: int) -> None:
     """*url* 을 *dest* 에 받는다. 진행률은 0~2% 범위로 보고한다.
 
@@ -999,69 +937,6 @@ def _download_archive(url: str, dest: str, *, timeout: int) -> None:
                 last_pct[0] = raw_pct
 
     download(url, dest, on_progress=on_progress, timeout=min(timeout, _READ_TIMEOUT), user_agent="saba-chan/1.0")
-
-
-def _safe_member_path(dest: Path, name: str) -> Path:
-    """아카이브 항목이 *dest* 밖을 가리키면 ValueError (zip-slip 방지)."""
-    target = (dest / name).resolve()
-    if target != dest and dest not in target.parents:
-        raise ValueError(f"Archive member escapes target directory: {name}")
-    return target
-
-
-def _extract_archive(data: bytes, name: str, dest: Path) -> None:
-    """zip 또는 tar.gz 아카이브를 *dest* 에 안전하게 푼다.
-
-    모든 항목 경로를 먼저 검사한다. 하나라도 *dest* 밖을 가리키면 아무것도 풀지 않는다.
-    tar의 링크·장치 파일은 거부한다. *dest* 옆 임시 폴더에 풀고 끝나면 옮기므로,
-    중간에 실패해도 *dest* 에는 반쯤 풀린 파일이 남지 않는다.
-    """
-    dest = Path(dest).resolve()
-    dest.mkdir(parents=True, exist_ok=True)
-    tmp = Path(tempfile.mkdtemp(prefix=".extract-", dir=dest.parent))
-    try:
-        if name.endswith(".zip"):
-            with zipfile.ZipFile(io.BytesIO(data)) as zf:
-                for member in zf.namelist():
-                    _safe_member_path(tmp.resolve(), member)
-                zf.extractall(tmp)
-        else:
-            with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
-                members = tf.getmembers()
-                for member in members:
-                    _safe_member_path(tmp.resolve(), member.name)
-                    if not (member.isfile() or member.isdir()):
-                        raise ValueError(f"Unsupported archive member type: {member.name}")
-                extra = {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
-                tf.extractall(tmp, members=members, **extra)
-        _check_move_targets(tmp, dest, dest)
-        _move_tree(tmp, dest)
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-def _check_move_targets(src: Path, dest: Path, root: Path) -> None:
-    """옮기기 전에 *dest* 쪽 실제 경로를 검사한다. 이미 있는 링크를 따라 *root* 밖으로 나가면
-    아무것도 옮기지 않고 ValueError."""
-    for child in src.iterdir():
-        target = dest / child.name
-        if target.is_symlink():
-            raise ValueError(f"Refusing to extract over a link: {target}")
-        if not target.resolve().is_relative_to(root):
-            raise ValueError(f"Archive member escapes destination: {target}")
-        if child.is_dir() and not child.is_symlink() and target.is_dir():
-            _check_move_targets(child, target, root)
-
-
-def _move_tree(src: Path, dest: Path) -> None:
-    """*src* 의 내용을 *dest* 로 옮긴다 (같은 이름의 파일은 덮어쓴다)."""
-    for child in src.iterdir():
-        target = dest / child.name
-        if child.is_dir() and not child.is_symlink():
-            target.mkdir(exist_ok=True)
-            _move_tree(child, target)
-        else:
-            os.replace(child, target)
 
 
 # ── Plugin runner interface ──────────────────────────────────────

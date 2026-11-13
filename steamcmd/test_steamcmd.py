@@ -11,7 +11,6 @@ import subprocess
 import sys
 import tarfile
 import urllib.request
-import zipfile
 from unittest.mock import patch
 
 import pytest
@@ -567,8 +566,8 @@ def fake_steamcmd(tmp_path, monkeypatch):
     exe = tmp_path / "steamcmd.exe"
     exe.write_text("")
     monkeypatch.setattr(steamcmd_mod, "_POLL_INTERVAL", 0)
-    # 실제 프로세스 트리 종료는 test_timeout_kill_reaches_grandchildren이 본다
-    monkeypatch.setattr(steamcmd_mod, "_kill_tree", lambda proc: proc.kill())
+    # 실제 프로세스 트리 종료는 test_install_timeout_ends_the_steamcmd_grandchild가 본다
+    monkeypatch.setattr(steamcmd_mod, "force_kill", lambda pid: (True, None))
     calls = []
 
     def install_with(proc, **kwargs):
@@ -614,19 +613,18 @@ def test_install_kills_steamcmd_on_timeout(fake_steamcmd):
 
 
 @pytest.mark.skipif(not os.path.isdir("/proc"), reason="Linux 프로세스 트리(/proc)")
-def test_timeout_kill_reaches_grandchildren(tmp_path):
-    """steamcmd.sh가 띄운 실제 steamcmd(손자)까지 끝낸다."""
-    import subprocess
+def test_install_timeout_ends_the_steamcmd_grandchild(tmp_path, monkeypatch):
+    """제한 시간을 넘기면 steamcmd.sh가 띄운 실제 steamcmd(손자)까지 끝낸다 (남으면 install_dir에 계속 쓴다)."""
     import time
     pidfile = tmp_path / "pid"
-    proc = subprocess.Popen(["sh", "-c", f"sleep 30 & echo $! > {pidfile}; wait"])
-    for _ in range(100):
-        if pidfile.exists() and pidfile.read_text().strip():
-            break
-        time.sleep(0.05)
+    exe = tmp_path / "steamcmd.sh"
+    exe.write_text(f"#!/bin/sh\nsleep 30 &\necho $! > {pidfile}\nwait\n")
+    exe.chmod(0o755)
+    monkeypatch.setattr(steamcmd_mod, "_POLL_INTERVAL", 0.05)
+    with patch.object(SteamCMD, "_fix_local_buildid"):
+        result = SteamCMD(explicit_path=str(exe)).install(380870, tmp_path / "server", timeout=1)
+    assert result["success"] is False
     grandchild = int(pidfile.read_text())
-    steamcmd_mod._kill_tree(proc)
-    proc.wait(timeout=5)
     for _ in range(100):
         try:
             os.kill(grandchild, 0)
@@ -636,6 +634,7 @@ def test_timeout_kill_reaches_grandchildren(tmp_path):
             break
         time.sleep(0.05)
     else:
+        os.kill(grandchild, 9)
         pytest.fail("grandchild still running")
 
 
@@ -658,14 +657,6 @@ def test_app_info_print_decodes_utf8_with_replace(tmp_path, monkeypatch):
     assert seen["creationflags"] == steamcmd_mod._creation_flags()
 
 
-def _zip_bytes(entries):
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        for name, data in entries.items():
-            zf.writestr(name, data)
-    return buf.getvalue()
-
-
 def _tar_bytes(entries):
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
@@ -674,24 +665,6 @@ def _tar_bytes(entries):
             info.size = len(data)
             tf.addfile(info, io.BytesIO(data))
     return buf.getvalue()
-
-
-@pytest.mark.parametrize("builder,name", [(_zip_bytes, "x.zip"), (_tar_bytes, "x.tar.gz")])
-def test_extract_archive_rejects_path_traversal(tmp_path, builder, name):
-    data = builder({"ok.txt": b"1", "../evil.txt": b"2"})
-    dest = tmp_path / "out"
-    dest.mkdir()
-    with pytest.raises(ValueError):
-        steamcmd_mod._extract_archive(data, name, dest)
-    assert not (tmp_path / "evil.txt").exists()
-
-
-@pytest.mark.parametrize("builder,name", [(_zip_bytes, "x.zip"), (_tar_bytes, "x.tar.gz")])
-def test_extract_archive_extracts_safe_members(tmp_path, builder, name):
-    data = builder({"steamcmd.exe": b"bin", "sub/file.txt": b"x"})
-    steamcmd_mod._extract_archive(data, name, tmp_path)
-    assert (tmp_path / "steamcmd.exe").read_bytes() == b"bin"
-    assert (tmp_path / "sub" / "file.txt").read_bytes() == b"x"
 
 
 def test_cli_reports_errors_as_json_with_exit_zero():
@@ -745,7 +718,7 @@ def test_only_the_portable_copy_is_used(tmp_path, monkeypatch, offline_steamcmd)
     system = tmp_path / "SteamCMD" / steamcmd_mod._EXE_NAME
     system.parent.mkdir(parents=True)
     system.write_bytes(b"x")
-    monkeypatch.setattr(steamcmd_mod.shutil, "which", lambda name: str(system))
+    monkeypatch.setattr("shutil.which", lambda name: str(system))
     assert SteamCMD._detect() is None
     offline_steamcmd.mkdir()
     (offline_steamcmd / steamcmd_mod._EXE_NAME).write_bytes(b"x")
@@ -836,7 +809,7 @@ def test_install_limit_takes_off_only_the_bootstrap_time_actually_spent(fake_ste
             clock[0] += bootstrap_secs
 
         monkeypatch.setattr(steamcmd_mod, "_download_archive", _download)
-        monkeypatch.setattr(steamcmd_mod, "_extract_archive", lambda data, url, dest: (dest / steamcmd_mod._EXE_NAME).write_text(""))
+        monkeypatch.setattr(steamcmd_mod, "safe_extract", lambda archive, dest: (dest / steamcmd_mod._EXE_NAME).write_text(""))
     steam.ensure_available()
     monkeypatch.setattr(steamcmd_mod.subprocess, "Popen", lambda *a, **k: _FakeProc(finish_after=None))
     with patch.object(SteamCMD, "_fix_local_buildid"):
@@ -998,21 +971,39 @@ def test_install_for_module_needs_a_steamcmd_app(tmp_path):
         install_for_module(tmp_path, tmp_path / "server")
 
 
-def test_extract_archive_failure_leaves_dest_untouched(tmp_path, monkeypatch):
-    """풀다가 실패해도 dest에는 반쯤 풀린 파일이 남지 않는다 (임시 폴더에 풀고 옮긴다)."""
-    dest = tmp_path / "out"
-    dest.mkdir()
-    (dest / "keep.txt").write_text("old")
-    orig = zipfile.ZipFile.extractall
+def _bootstrap_with(monkeypatch, archive_bytes):
+    """Valve CDN 대신 *archive_bytes* 를 받는 SteamCMD."""
+    def fake_download(url, dest, *, timeout):
+        with open(dest, "wb") as f:
+            f.write(archive_bytes)
 
-    def boom(self, path=None, members=None, pwd=None):
-        orig(self, path)
+    monkeypatch.setattr(steamcmd_mod, "_download_archive", fake_download)
+    return SteamCMD()
+
+
+def test_bootstrap_unpacks_the_archive_into_the_portable_folder(monkeypatch, offline_steamcmd):
+    exe = steamcmd_mod._EXE_NAME
+    steam = _bootstrap_with(monkeypatch, _tar_bytes({exe: b"#!/bin/sh\n", "linux32/steamcmd": b"bin"}))
+    steam.ensure_available()
+    assert steam.path == offline_steamcmd / exe
+    assert (offline_steamcmd / "linux32" / "steamcmd").read_bytes() == b"bin"
+    assert sorted(p.name for p in offline_steamcmd.parent.iterdir()) == [offline_steamcmd.name], "받은 압축을 남기지 않는다"
+
+
+def test_a_failed_bootstrap_unpack_does_not_leave_a_half_installed_steamcmd(monkeypatch, offline_steamcmd):
+    """풀다가 실패하면 실행 파일을 남기지 않는다: 남으면 다음 호출이 반쯤 풀린 SteamCMD를 다 된 것으로 쓴다."""
+    exe = steamcmd_mod._EXE_NAME
+    steam = _bootstrap_with(monkeypatch, _tar_bytes({exe: b"#!/bin/sh\n"}))
+
+    def disk_full(archive, dest):
+        (dest / exe).write_text("partial")
         raise OSError("disk full")
 
-    monkeypatch.setattr(zipfile.ZipFile, "extractall", boom)
+    monkeypatch.setattr(steamcmd_mod, "safe_extract", disk_full)
     with pytest.raises(OSError):
-        steamcmd_mod._extract_archive(_zip_bytes({"a.txt": b"1", "b.txt": b"2"}), "x.zip", dest)
-    assert sorted(p.name for p in dest.iterdir()) == ["keep.txt"]
+        steam.ensure_available()
+    assert not (offline_steamcmd / exe).exists()
+    assert steam.available is False
 
 
 def _write_acf(root, state_flags):
@@ -1049,21 +1040,6 @@ def test_install_explicit_validate_is_honoured(fake_steamcmd, tmp_path, explicit
     _write_acf(tmp_path / "server", 4 if explicit else 1026)
     install_with(_FakeProc(b"Success! App\n"), validate=explicit)
     assert ("validate" in calls[0][0]) is explicit
-
-
-def test_extract_refuses_existing_link_in_dest(tmp_path):
-    dest = tmp_path / "dest"
-    outside = tmp_path / "outside"
-    dest.mkdir()
-    outside.mkdir()
-    (outside / "file.txt").write_text("keep")
-    try:
-        (dest / "sub").symlink_to(outside, target_is_directory=True)
-    except (OSError, NotImplementedError):
-        pytest.skip("symlinks unavailable")
-    with pytest.raises(ValueError):
-        steamcmd_mod._extract_archive(_zip_bytes({"sub/file.txt": b"x"}), "x.zip", dest)
-    assert (outside / "file.txt").read_text() == "keep"
 
 
 # ── 확인 실패는 "업데이트 없음"과 구분한다 ──
