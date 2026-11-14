@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "desktop-pet",
   "name": "Desktop Pet",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Puts a small Saba-chan in a corner of your desktop who reacts to your servers",
   "descriptions": {
     "ko": "바탕화면 구석에 서버 일에 반응하는 작은 사바쨩을 띄웁니다",
@@ -16,7 +16,7 @@
     "fr": "Place une petite Saba-chan dans un coin du bureau qui réagit à vos serveurs"
   },
   "author": "WareAoba",
-  "min_app_version": "0.1.15-0",
+  "min_app_version": "0.1.14-beta.2",
   "dependencies": {},
   "permissions": {},
   "gui": {
