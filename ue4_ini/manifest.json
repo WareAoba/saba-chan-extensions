@@ -16,12 +16,7 @@
     "fr": "Lit et écrit les valeurs OptionSettings des fichiers INI d'Unreal Engine 4"
   },
   "author": "WareAoba",
-  "min_app_version": "0.1.0",
+  "min_app_version": "0.1.12",
   "dependencies": {},
-
-  "instance_fields": {
-    "ue4_ini_enabled": { "type": "boolean", "default": false },
-    "ue4_ini_section": { "type": "string", "optional": true }
-  },
-  "permissions": { "native_code": true }
+  "permissions": {}
 }

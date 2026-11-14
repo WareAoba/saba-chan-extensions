@@ -16,7 +16,7 @@
     "fr": "Installe et met à jour les serveurs de jeu avec SteamCMD"
   },
   "author": "WareAoba",
-  "min_app_version": "0.1.11",
+  "min_app_version": "0.1.14-beta.2",
   "dependencies": {},
 
   "python_modules": {
@@ -33,10 +33,7 @@
 
   "instance_fields": {
     "install_method_steamcmd": { "type": "boolean", "default": false },
-    "steamcmd_app_id": { "type": "number", "optional": true },
-    "steamcmd_anonymous": { "type": "boolean", "default": true },
-    "steamcmd_beta": { "type": "string", "optional": true },
-    "steamcmd_platform": { "type": "string", "optional": true }
+    "steamcmd_beta": { "type": "string", "optional": true }
   },
   "permissions": { "network": true, "spawn_process": true }
 }

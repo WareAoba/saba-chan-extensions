@@ -22,23 +22,19 @@ Daemon hook (server.check_update):
 
 from __future__ import annotations
 
-import io
 import os
 import platform
 import re
-import shutil
 import stat
 import subprocess
 import sys
-import tarfile
 import tempfile
 import threading
 import time
-import zipfile
 from pathlib import Path
 from typing import Any, Optional
 
-from daemon_rcon import download, progress, run_lifecycle
+from daemon_rcon import download, extension_data_dir, force_kill, progress, run_lifecycle, safe_extract
 from i18n import I18n
 
 i18n = I18n(os.path.dirname(os.path.abspath(__file__)))
@@ -79,30 +75,6 @@ _POLL_INTERVAL = 2.0
 # 설치 폴더 훑기는 걸린 시간의 이 배수만큼 쉰 뒤에 다시 한다. 파일 수만 개인 서버를 느린 디스크에 받을 때
 # 2초마다 훑으면 훑기가 받기와 디스크를 다툰다 (훑는 시간이 전체의 1/5를 넘지 않게)
 _SCAN_REST = 4
-
-# Approximate download sizes (bytes) for common dedicated server app IDs.
-# Used to estimate download progress when SteamCMD stdout is buffered.
-# Values are rough estimates and will be refined as more data is available.
-_KNOWN_APP_SIZES: dict[int, int] = {
-    # Game Server name                    # Approx download (bytes)
-    90:      3_200_000_000,   # Half-Life Dedicated Server
-    232250:  27_000_000_000,  # Team Fortress 2 DS
-    232330:  35_000_000_000,  # Counter-Strike 2 DS
-    258550:  3_000_000_000,   # Rust DS
-    376030:  12_000_000_000,  # ARK: Survival Evolved DS
-    380870:  6_300_000_000,   # Project Zomboid DS
-    443030:  6_000_000_000,   # Conan Exiles DS
-    530870:  900_000_000,     # Factorio Headless
-    896660:  2_500_000_000,   # Valheim DS
-    1007820: 8_000_000_000,   # Satisfactory DS
-    1026340: 4_200_000_000,   # Enshrouded DS
-    1218040: 2_500_000_000,   # Necesse DS
-    1690800: 3_000_000_000,   # Abiotic Factor DS
-    1829350: 6_000_000_000,   # V Rising DS
-    2278520: 5_000_000_000,   # Core Keeper DS
-    2394010: 5_700_000_000,   # Palworld DS
-    2430930: 800_000_000,     # Soulmask DS
-}
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -201,10 +173,112 @@ def _portable_dir() -> Path:
 
     데몬이 준 ``SABA_EXTENSION_DATA_ROOT/steamcmd`` (격리된 실행은 구성요소마다 다른 뿌리를 받는다).
     """
-    root = os.environ.get("SABA_EXTENSION_DATA_ROOT", "")
-    if not root:
-        raise EnvironmentError("SABA_EXTENSION_DATA_ROOT environment variable not set")
-    return Path(root) / _PORTABLE_SUBDIR
+    return extension_data_dir(_PORTABLE_SUBDIR)
+
+
+_PROGRESS_LINE = re.compile(r"progress:\s*([\d.]+)\s*\((\d+)\s*/\s*(\d+)\)")
+
+
+def _watch_install(proc: subprocess.Popen, app_id: int, install_dir: Path, steamcmd_cache: Path,
+                   initial_size: int, deadline: Optional[float], download_size: int) -> Optional[str]:
+    """steamcmd가 끝날 때까지 진행률을 보고하고 출력 전체를 돌려준다. *deadline* 을 넘기면 None (종료는 부른 쪽이 한다).
+
+    *initial_size* 는 시작 전 install_dir(+ steamcmd 캐시) 크기다. 진행률은 출력의 progress 줄 → appmanifest →
+    디스크에 늘어난 크기 순서로 어림한다. *download_size* 는 모듈이 적은 받을 크기다 (0이면 디스크 크기로 어림하지 않는다).
+    """
+    # ── SteamCMD stdout을 별도 스레드에서 읽기 ──
+    # SteamCMD는 파이프에 full buffering을 사용하여 readline()이
+    # 프로세스 종료까지 블록됨. 별도 스레드로 분리.
+    stdout_lines: list[str] = []
+    parsed_pct = [0]  # mutable from thread
+    parsed_total = [0]  # total bytes from progress line
+    parsed_msg = [i18n.t("messages.connecting")]
+
+    def _reader():
+        try:
+            for raw in iter(proc.stdout.readline, b""):
+                line = raw.decode("utf-8", errors="replace")
+                stdout_lines.append(line)
+                m = _PROGRESS_LINE.search(line.strip())
+                if m:
+                    parsed_pct[0] = min(int(float(m.group(1))), 100)
+                    parsed_total[0] = int(m.group(3))
+                    dl_mb = int(m.group(2)) / 1_048_576
+                    total_mb = parsed_total[0] / 1_048_576
+                    parsed_msg[0] = i18n.t("messages.downloading_percent", done=f"{dl_mb:.0f}",
+                                           total=f"{total_mb:.0f}", percent=parsed_pct[0])
+        except Exception:
+            pass
+
+    reader_thread = threading.Thread(target=_reader, daemon=True)
+    reader_thread.start()
+
+    # ── 디스크 사용량 기반 프로그레스 모니터링 (메인 스레드) ──
+    # SteamCMD stdout이 버퍼링되어도 디스크 사용량은 실시간으로 변함.
+    progress(0, i18n.t("messages.connecting"))
+    last_msg = ""
+    last_pct = -1
+    heartbeat_counter = 0
+    estimated_total = download_size
+    staged_from: Optional[int] = None
+    prev_added = 0
+    skip_scans = 0
+
+    while proc.poll() is None:
+        if deadline is not None and time.monotonic() >= deadline:
+            return None
+        time.sleep(_POLL_INTERVAL)
+        heartbeat_counter += 1
+
+        # stdout 파싱 결과가 있으면 우선 사용 (SteamCMD가 flush한 경우)
+        if parsed_pct[0] > 0:
+            pct = parsed_pct[0]
+            msg = parsed_msg[0]
+        elif skip_scans > 0:
+            skip_scans -= 1
+            pct, msg = max(last_pct, 0), last_msg
+        else:
+            # 디스크 사용량 (install_dir + steamcmd 캐시)
+            scan_started = time.monotonic()
+            current_size = _dir_size(install_dir)
+            if steamcmd_cache.exists() and steamcmd_cache.parent != install_dir:
+                current_size += _dir_size(steamcmd_cache)
+            if _POLL_INTERVAL > 0:
+                skip_scans = int(_SCAN_REST * (time.monotonic() - scan_started) / _POLL_INTERVAL)
+            added = current_size - initial_size
+            # 미리 잡은 크기: BytesToStage를 처음 본 때 받을 양을 넘었으면 그 크기, 그 뒤 받을 양을 넘는 순간이면 그 한 번에 는 크기.
+            # 그 뒤 BytesToStage까지 느는 비율이 받은 비율
+            values = _manifest_bytes(str(install_dir), app_id)
+            to_download = values.get("BytesToDownload", 0)
+            if values.get("BytesToStage", 0) > 0:
+                if staged_from is None:
+                    staged_from = added if added > to_download else 0
+                elif prev_added <= to_download < added:
+                    staged_from = max(staged_from, added - prev_added)
+            prev_added = added
+            manifest_progress = _manifest_progress(str(install_dir), app_id, added, staged_from)
+            if manifest_progress is not None:
+                # appmanifest의 받을 바이트를 총량으로
+                pct, msg = manifest_progress
+            else:
+                # total 결정: stdout 파싱 > 알려진 앱 크기 > 없음
+                pct, msg = _disk_progress(added, parsed_total[0] or estimated_total)
+                if pct is None:
+                    pct = max(last_pct, 0)
+        # 어림의 근거가 바뀌어도(디스크 → appmanifest) 진행률과 문구는 뒤로 가지 않는다
+        if pct < last_pct:
+            pct, msg = last_pct, last_msg
+
+        # 메시지 또는 퍼센티지가 변할 때마다 보고 + 10사이클(20초)마다 heartbeat
+        if msg != last_msg or pct != last_pct or heartbeat_counter >= 10:
+            progress(pct, msg)
+            last_msg = msg
+            last_pct = pct
+            heartbeat_counter = 0
+
+    # 프로세스 종료 — reader 스레드 합류
+    reader_thread.join(timeout=10)
+    return "".join(stdout_lines)
 
 
 # ── Core Class ───────────────────────────────────────────────────
@@ -276,7 +350,7 @@ class SteamCMD:
 
         portable.mkdir(parents=True, exist_ok=True)
 
-        # 받은 압축은 portable 옆 임시 파일에 두고 읽은 뒤 지운다 (mkdtemp 폴더는 격리 실행이 쓰지 못한다)
+        # 받은 압축은 portable 옆 임시 파일에 두고 푼 뒤 지운다 (mkdtemp 폴더는 격리 실행이 쓰지 못한다)
         fd, archive = tempfile.mkstemp(prefix=".steamcmd-", suffix=".download", dir=portable.parent)
         os.close(fd)
         try:
@@ -285,14 +359,18 @@ class SteamCMD:
                 _download_archive(url, archive, timeout=timeout)
             finally:
                 self._bootstrap_secs += time.monotonic() - started
-            data = Path(archive).read_bytes()
+            _log(f"Downloaded {os.path.getsize(archive) / 1_048_576:.1f} MB, extracting …")
+            try:
+                safe_extract(archive, portable)
+            except BaseException:
+                # 실행 파일이 있으면 다 받은 것으로 본다: 반쯤 풀린 채 남기지 않는다 (다음 호출이 다시 받는다)
+                exe_path.unlink(missing_ok=True)
+                raise
         finally:
             try:
                 os.remove(archive)
             except OSError:
                 pass
-        _log(f"Downloaded {len(data) / 1_048_576:.1f} MB, extracting …")
-        _extract_archive(data, url, portable)
 
         if not exe_path.exists():
             raise FileNotFoundError(
@@ -319,8 +397,12 @@ class SteamCMD:
         platform_override: Optional[str] = None,
         validate: Optional[bool] = None,
         timeout: Optional[float] = _INSTALL_BUDGET,
+        download_size: int = 0,
     ) -> dict[str, Any]:
         """Run ``steamcmd +app_update`` to install or update a game server.
+
+        *download_size* 는 받을 파일의 대략적인 크기(바이트, 모듈 module.toml ``[install] download_size``)다.
+        SteamCMD 출력과 appmanifest에서 크기를 읽지 못하는 동안 늘어난 디스크 크기로 진행률을 어림하는 데 쓴다.
 
         *timeout* 는 재시도와 이 객체의 SteamCMD 받기를 포함한 전체 제한 시간(초)이다. 넘기면 steamcmd를
         종료하고 실패를 반환한다. ``None`` 이면 제한하지 않는다.
@@ -340,40 +422,10 @@ class SteamCMD:
         install_dir = Path(install_dir)
         install_dir.mkdir(parents=True, exist_ok=True)
 
-        args: list[str] = [str(self._path)]
+        args = self._app_update_args(
+            app_id, install_dir, anonymous=anonymous, beta=beta, beta_password=beta_password,
+            platform_override=platform_override, validate=validate)
 
-        # ── Login 전에 설정해야 하는 옵션들 ──
-
-        # Platform override (반드시 login 전)
-        if platform_override:
-            args += ["+@sSteamCmdForcePlatformType", platform_override]
-
-        # Install directory (반드시 login 전)
-        args += ["+force_install_dir", str(install_dir)]
-
-        # Login
-        if anonymous:
-            args += ["+login", "anonymous"]
-        else:
-            raise NotImplementedError(
-                "Non-anonymous SteamCMD login is not yet supported."
-            )
-
-        # App update
-        args += ["+app_update", str(app_id)]
-        # 옵션과 값은 별도 argv 토큰이어야 steamcmd가 인식한다
-        if beta:
-            args += ["-beta", beta]
-            if beta_password:
-                args += ["-betapassword", beta_password]
-        if validate is None:
-            validate = not _fully_installed(str(install_dir), app_id)
-        if validate:
-            args.append("validate")
-
-        args.append("+quit")
-
-        pct_pattern = re.compile(r"progress:\s*([\d.]+)\s*\((\d+)\s*/\s*(\d+)\)")
         if timeout is not None:
             timeout = max(0.0, timeout - self._bootstrap_secs)
         deadline = time.monotonic() + timeout if timeout is not None else None
@@ -396,101 +448,12 @@ class SteamCMD:
                 stderr=subprocess.STDOUT,
                 creationflags=_creation_flags(),
             )
+            stdout = _watch_install(proc, app_id, install_dir, steamcmd_cache, initial_size, deadline, download_size)
 
-            # ── SteamCMD stdout을 별도 스레드에서 읽기 ──
-            # SteamCMD는 파이프에 full buffering을 사용하여 readline()이
-            # 프로세스 종료까지 블록됨. 별도 스레드로 분리.
-            stdout_lines: list[str] = []
-            parsed_pct = [0]  # mutable from thread
-            parsed_total = [0]  # total bytes from progress line
-            parsed_msg = [i18n.t("messages.connecting")]
-
-            def _reader():
-                try:
-                    for raw in iter(proc.stdout.readline, b""):
-                        line = raw.decode("utf-8", errors="replace")
-                        stdout_lines.append(line)
-                        m = pct_pattern.search(line.strip())
-                        if m:
-                            parsed_pct[0] = min(int(float(m.group(1))), 100)
-                            parsed_total[0] = int(m.group(3))
-                            dl_mb = int(m.group(2)) / 1_048_576
-                            total_mb = parsed_total[0] / 1_048_576
-                            parsed_msg[0] = i18n.t("messages.downloading_percent", done=f"{dl_mb:.0f}",
-                                                   total=f"{total_mb:.0f}", percent=parsed_pct[0])
-                except Exception:
-                    pass
-
-            reader_thread = threading.Thread(target=_reader, daemon=True)
-            reader_thread.start()
-
-            # ── 디스크 사용량 기반 프로그레스 모니터링 (메인 스레드) ──
-            # SteamCMD stdout이 버퍼링되어도 디스크 사용량은 실시간으로 변함.
-            progress(0, i18n.t("messages.connecting"))
-            last_msg = ""
-            last_pct = -1
-            heartbeat_counter = 0
-            estimated_total = _KNOWN_APP_SIZES.get(app_id, 0)
-            staged_from: Optional[int] = None
-            prev_added = 0
-            skip_scans = 0
-            timed_out = False
-
-            while proc.poll() is None:
-                if deadline is not None and time.monotonic() >= deadline:
-                    timed_out = True
-                    break
-                time.sleep(_POLL_INTERVAL)
-                heartbeat_counter += 1
-
-                # stdout 파싱 결과가 있으면 우선 사용 (SteamCMD가 flush한 경우)
-                if parsed_pct[0] > 0:
-                    pct = parsed_pct[0]
-                    msg = parsed_msg[0]
-                elif skip_scans > 0:
-                    skip_scans -= 1
-                    pct, msg = max(last_pct, 0), last_msg
-                else:
-                    # 디스크 사용량 (install_dir + steamcmd 캐시)
-                    scan_started = time.monotonic()
-                    current_size = _dir_size(install_dir)
-                    if steamcmd_cache.exists() and steamcmd_cache.parent != install_dir:
-                        current_size += _dir_size(steamcmd_cache)
-                    if _POLL_INTERVAL > 0:
-                        skip_scans = int(_SCAN_REST * (time.monotonic() - scan_started) / _POLL_INTERVAL)
-                    added = current_size - initial_size
-                    # 미리 잡은 크기: BytesToStage를 처음 본 때 받을 양을 넘었으면 그 크기, 그 뒤 받을 양을 넘는 순간이면 그 한 번에 는 크기.
-                    # 그 뒤 BytesToStage까지 느는 비율이 받은 비율
-                    values = _manifest_bytes(str(install_dir), app_id)
-                    to_download = values.get("BytesToDownload", 0)
-                    if values.get("BytesToStage", 0) > 0:
-                        if staged_from is None:
-                            staged_from = added if added > to_download else 0
-                        elif prev_added <= to_download < added:
-                            staged_from = max(staged_from, added - prev_added)
-                    prev_added = added
-                    manifest_progress = _manifest_progress(str(install_dir), app_id, added, staged_from)
-                    if manifest_progress is not None:
-                        # appmanifest의 받을 바이트를 총량으로
-                        pct, msg = manifest_progress
-                    else:
-                        # total 결정: stdout 파싱 > 알려진 앱 크기 > 없음
-                        pct, msg = _disk_progress(added, parsed_total[0] or estimated_total)
-                        if pct is None:
-                            pct = max(last_pct, 0)
-                # 어림의 근거가 바뀌어도(디스크 → appmanifest) 진행률과 문구는 뒤로 가지 않는다
-                if pct < last_pct:
-                    pct, msg = last_pct, last_msg
-
-                # 메시지 또는 퍼센티지가 변할 때마다 보고 + 10사이클(20초)마다 heartbeat
-                if msg != last_msg or pct != last_pct or heartbeat_counter >= 10:
-                    progress(pct, msg)
-                    last_msg = msg
-                    last_pct = pct
-                    heartbeat_counter = 0
-
-            if timed_out:
-                _kill_tree(proc)
+            if stdout is None:
+                # steamcmd.sh는 실제 steamcmd를 자식으로 띄운다: 직계만 끝내면 손자가 남아 install_dir에 계속 쓴다
+                force_kill(proc.pid)
+                proc.kill()
                 proc.wait(timeout=10)
                 _log(f"SteamCMD timed out after {timeout} s for app {app_id}; process killed")
                 return {
@@ -500,9 +463,6 @@ class SteamCMD:
                     "app_id": app_id,
                 }
 
-            # 프로세스 종료 — reader 스레드 합류
-            reader_thread.join(timeout=10)
-            stdout = "".join(stdout_lines)
             returncode = proc.returncode
 
             if returncode == 0 or "Success! App" in stdout:
@@ -548,6 +508,52 @@ class SteamCMD:
             "install_dir": None,
             "app_id": app_id,
         }
+
+    def _app_update_args(
+        self,
+        app_id: int,
+        install_dir: Path,
+        *,
+        anonymous: bool,
+        beta: Optional[str],
+        beta_password: Optional[str],
+        platform_override: Optional[str],
+        validate: Optional[bool],
+    ) -> list[str]:
+        """``steamcmd +app_update`` 명령줄. 인자 뜻은 :meth:`install` 과 같다."""
+        args: list[str] = [str(self._path)]
+
+        # ── Login 전에 설정해야 하는 옵션들 ──
+
+        # Platform override (반드시 login 전)
+        if platform_override:
+            args += ["+@sSteamCmdForcePlatformType", platform_override]
+
+        # Install directory (반드시 login 전)
+        args += ["+force_install_dir", str(install_dir)]
+
+        # Login
+        if anonymous:
+            args += ["+login", "anonymous"]
+        else:
+            raise NotImplementedError(
+                "Non-anonymous SteamCMD login is not yet supported."
+            )
+
+        # App update
+        args += ["+app_update", str(app_id)]
+        # 옵션과 값은 별도 argv 토큰이어야 steamcmd가 인식한다
+        if beta:
+            args += ["-beta", beta]
+            if beta_password:
+                args += ["-betapassword", beta_password]
+        if validate is None:
+            validate = not _fully_installed(str(install_dir), app_id)
+        if validate:
+            args.append("validate")
+
+        args.append("+quit")
+        return args
 
     def update(
         self,
@@ -915,70 +921,6 @@ def _creation_flags() -> int:
     return 0
 
 
-def _children_map() -> dict[int, list[int]]:
-    """부모 pid → 자식 pid. Linux는 /proc에서 바로 읽고, 없으면(macOS) ps를 쓴다."""
-    pairs: list[tuple[int, int]] = []
-    if os.path.isdir("/proc"):
-        for entry in os.listdir("/proc"):
-            if not entry.isdigit():
-                continue
-            try:
-                with open(f"/proc/{entry}/stat", encoding="utf-8", errors="replace") as f:
-                    # comm에 공백·괄호가 들어갈 수 있어 마지막 ')' 뒤에서 읽는다: state ppid ...
-                    ppid = int(f.read().rsplit(")", 1)[1].split()[1])
-            except (OSError, ValueError, IndexError):
-                continue
-            pairs.append((ppid, int(entry)))
-    else:
-        try:
-            out = subprocess.run(["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, timeout=5).stdout
-        except (OSError, subprocess.SubprocessError):
-            out = ""
-        for line in out.splitlines():
-            parts = line.split()
-            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                pairs.append((int(parts[1]), int(parts[0])))
-    children: dict[int, list[int]] = {}
-    for ppid, pid in pairs:
-        children.setdefault(ppid, []).append(pid)
-    return children
-
-
-def _descendants(pid: int) -> list[int]:
-    """*pid* 아래 모든 자손 pid (POSIX)."""
-    children = _children_map()
-    found: list[int] = []
-    queue = [pid]
-    while queue:
-        kids = children.get(queue.pop(), [])
-        found.extend(kids)
-        queue.extend(kids)
-    return found
-
-
-def _kill_tree(proc: subprocess.Popen) -> None:
-    """steamcmd와 그 자손을 모두 끝낸다.
-
-    Linux/macOS의 steamcmd.sh는 실제 steamcmd를 자식으로 띄우므로 직계 자식만 죽이면
-    손자가 남아 install_dir에 계속 쓴다. 데몬의 프로세스 그룹 종료가 닿도록 새 세션은 만들지 않는다.
-    """
-    if _SYSTEM == "Windows":
-        try:
-            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-                           capture_output=True, timeout=10, creationflags=_creation_flags())
-        except (OSError, subprocess.SubprocessError):
-            pass
-        proc.kill()
-        return
-    descendants = _descendants(proc.pid)
-    proc.kill()
-    for pid in descendants:
-        try:
-            os.kill(pid, 9)
-        except OSError:
-            pass
-
-
 def _download_archive(url: str, dest: str, *, timeout: int) -> None:
     """*url* 을 *dest* 에 받는다. 진행률은 0~2% 범위로 보고한다.
 
@@ -1001,69 +943,6 @@ def _download_archive(url: str, dest: str, *, timeout: int) -> None:
     download(url, dest, on_progress=on_progress, timeout=min(timeout, _READ_TIMEOUT), user_agent="saba-chan/1.0")
 
 
-def _safe_member_path(dest: Path, name: str) -> Path:
-    """아카이브 항목이 *dest* 밖을 가리키면 ValueError (zip-slip 방지)."""
-    target = (dest / name).resolve()
-    if target != dest and dest not in target.parents:
-        raise ValueError(f"Archive member escapes target directory: {name}")
-    return target
-
-
-def _extract_archive(data: bytes, name: str, dest: Path) -> None:
-    """zip 또는 tar.gz 아카이브를 *dest* 에 안전하게 푼다.
-
-    모든 항목 경로를 먼저 검사한다. 하나라도 *dest* 밖을 가리키면 아무것도 풀지 않는다.
-    tar의 링크·장치 파일은 거부한다. *dest* 옆 임시 폴더에 풀고 끝나면 옮기므로,
-    중간에 실패해도 *dest* 에는 반쯤 풀린 파일이 남지 않는다.
-    """
-    dest = Path(dest).resolve()
-    dest.mkdir(parents=True, exist_ok=True)
-    tmp = Path(tempfile.mkdtemp(prefix=".extract-", dir=dest.parent))
-    try:
-        if name.endswith(".zip"):
-            with zipfile.ZipFile(io.BytesIO(data)) as zf:
-                for member in zf.namelist():
-                    _safe_member_path(tmp.resolve(), member)
-                zf.extractall(tmp)
-        else:
-            with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
-                members = tf.getmembers()
-                for member in members:
-                    _safe_member_path(tmp.resolve(), member.name)
-                    if not (member.isfile() or member.isdir()):
-                        raise ValueError(f"Unsupported archive member type: {member.name}")
-                extra = {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
-                tf.extractall(tmp, members=members, **extra)
-        _check_move_targets(tmp, dest, dest)
-        _move_tree(tmp, dest)
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-def _check_move_targets(src: Path, dest: Path, root: Path) -> None:
-    """옮기기 전에 *dest* 쪽 실제 경로를 검사한다. 이미 있는 링크를 따라 *root* 밖으로 나가면
-    아무것도 옮기지 않고 ValueError."""
-    for child in src.iterdir():
-        target = dest / child.name
-        if target.is_symlink():
-            raise ValueError(f"Refusing to extract over a link: {target}")
-        if not target.resolve().is_relative_to(root):
-            raise ValueError(f"Archive member escapes destination: {target}")
-        if child.is_dir() and not child.is_symlink() and target.is_dir():
-            _check_move_targets(child, target, root)
-
-
-def _move_tree(src: Path, dest: Path) -> None:
-    """*src* 의 내용을 *dest* 로 옮긴다 (같은 이름의 파일은 덮어쓴다)."""
-    for child in src.iterdir():
-        target = dest / child.name
-        if child.is_dir() and not child.is_symlink():
-            target.mkdir(exist_ok=True)
-            _move_tree(child, target)
-        else:
-            os.replace(child, target)
-
-
 # ── Plugin runner interface ──────────────────────────────────────
 # Called when the Rust daemon executes:
 #   python extensions/steamcmd/steamcmd.py <function> < context.json
@@ -1076,7 +955,7 @@ def install_for_module(
     beta: Optional[str] = None,
     timeout: Optional[float] = _INSTALL_BUDGET,
 ) -> dict[str, Any]:
-    """모듈 module.toml ``[install]``(``method = "steamcmd"``, ``app_id``, ``anonymous``, ``beta``)대로
+    """모듈 module.toml ``[install]``(``method = "steamcmd"``, ``app_id``, ``anonymous``, ``beta``, ``download_size``)대로
     게임 서버를 설치·업데이트한다. 앱 ID를 모듈 코드에 다시 적지 않게 한다 (선언은 module.toml 한 곳).
 
     SteamCMD가 없으면 받아 온다. 반환은 :meth:`SteamCMD.install` 과 같다.
@@ -1097,6 +976,7 @@ def install_for_module(
         anonymous=bool(section.get("anonymous", True)),
         beta=beta or section.get("beta"),
         timeout=timeout,
+        download_size=int(section.get("download_size") or 0),
     )
 
 
@@ -1114,13 +994,13 @@ def _plugin_status(config: dict) -> dict:
 def _plugin_check_update(config: dict) -> dict:
     """server.check_update — buildid 비교로 업데이트 여부를 확인한다.
 
-    브랜치 우선순위: config.branch → extension_data.steamcmd_beta → "public".
+    앱 ID는 데몬이 준 모듈 ``[install]``(config.install), 브랜치는 config.branch(사용자가 고른 브랜치, 없으면
+    모듈 ``[install] beta``)이고 없으면 "public"이다 (saba-core 0.1.14-beta.2).
     """
     steam = SteamCMD(config.get("explicit_path"))
-    app_id = config.get("app_id")
+    app_id = (config.get("install") or {}).get("app_id")
     install_dir = config.get("install_dir", "")
-    ext_data = config.get("extension_data") or {}
-    branch = config.get("branch") or ext_data.get("steamcmd_beta") or "public"
+    branch = config.get("branch") or "public"
 
     if not app_id:
         return {
