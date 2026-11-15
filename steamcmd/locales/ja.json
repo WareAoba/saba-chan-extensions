@@ -10,7 +10,6 @@
   },
   "errors": {
     "failed": "SteamCMD 失敗(終了コード {{code}}): {{detail}}",
-    "failed_after_retries": "SteamCMD が再試行後も失敗",
     "timed_out": "SteamCMD がタイムアウト({{seconds}} 秒)のため中断",
     "bootstrap_timed_out": "SteamCMD のダウンロードがタイムアウト({{seconds}} 秒)",
     "disk_write": "インストールフォルダーへのファイルの書き込み失敗。ドライブの状態、フォルダーの書き込み権限、ウイルス対策ソフトによるブロックを確認してください。({{detail}})",

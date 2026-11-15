@@ -10,7 +10,6 @@
   },
   "errors": {
     "failed": "SteamCMD 失敗（結束代碼 {{code}}）：{{detail}}",
-    "failed_after_retries": "SteamCMD 重試後仍失敗",
     "timed_out": "SteamCMD 逾時（{{seconds}} 秒），已中止",
     "bootstrap_timed_out": "SteamCMD 下載逾時（{{seconds}} 秒）",
     "disk_write": "安裝資料夾寫入失敗。檢查磁碟狀態、資料夾寫入權限與防毒軟體封鎖。（{{detail}}）",

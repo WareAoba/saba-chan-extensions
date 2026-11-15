@@ -10,7 +10,6 @@
   },
   "errors": {
     "failed": "SteamCMD failed (exit code {{code}}): {{detail}}",
-    "failed_after_retries": "SteamCMD failed after retries",
     "timed_out": "SteamCMD timed out ({{seconds}} s) and was stopped",
     "bootstrap_timed_out": "SteamCMD download timed out ({{seconds}} s)",
     "disk_write": "Writing files to the install folder failed. Check the drive, folder write permission and antivirus blocking. ({{detail}})",

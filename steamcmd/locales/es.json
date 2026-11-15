@@ -10,7 +10,6 @@
   },
   "errors": {
     "failed": "Error de SteamCMD (código de salida {{code}}): {{detail}}",
-    "failed_after_retries": "SteamCMD sigue fallando tras los reintentos",
     "timed_out": "SteamCMD detenido por tiempo agotado ({{seconds}} s)",
     "bootstrap_timed_out": "Tiempo de descarga de SteamCMD agotado ({{seconds}} s)",
     "disk_write": "Error al escribir en la carpeta de instalación. Comprueba la unidad, el permiso de escritura de la carpeta y el bloqueo del antivirus. ({{detail}})",

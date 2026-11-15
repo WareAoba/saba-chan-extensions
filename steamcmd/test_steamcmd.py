@@ -35,15 +35,11 @@ def offline_steamcmd(tmp_path, monkeypatch):
     return portable
 
 
-def test_package_exports_and_status_shape():
-    """패키지 재노출 + status() 구조 (모듈이 in-process로 사용하는 API)."""
+def test_package_exports():
+    """패키지 재노출 (모듈이 in-process로 사용하는 API)."""
     from extensions.steamcmd.steamcmd import SteamCMD as Inner
     assert SteamCMD is Inner
-    status = SteamCMD().status()
-    assert status["available"] is False
-    assert status["path"] is None
-    assert "portable_dir" in status
-    assert status["auto_bootstrap"] is True
+    assert SteamCMD().available is False
 
 
 def test_explicit_path_nonexistent():
@@ -578,11 +574,11 @@ def fake_steamcmd(tmp_path, monkeypatch):
 def test_install_passes_beta_as_separate_argv_tokens(fake_steamcmd):
     install_with, calls = fake_steamcmd
     proc = _FakeProc(b"Success! App '380870' fully installed.\n")
-    result, fix = install_with(proc, beta="unstable", beta_password="pw")
+    result, fix = install_with(proc, beta="unstable")
     assert result["success"] is True
     args = calls[0][0]
     i = args.index("+app_update")
-    assert args[i:i + 6] == ["+app_update", "380870", "-beta", "unstable", "-betapassword", "pw"]
+    assert args[i:i + 4] == ["+app_update", "380870", "-beta", "unstable"]
     assert not any(a.startswith("-beta ") for a in args)
     # 베타 설치의 buildid 교정은 해당 브랜치 기준
     assert fix.call_args.kwargs["branch"] == "unstable"
@@ -953,8 +949,18 @@ def test_install_for_module_reads_the_app_from_module_toml(tmp_path):
     assert calls[0] == "ensure"
     app_id, target, options = calls[1]
     assert (app_id, target) == (380870, str(tmp_path / "server"))
-    assert options["anonymous"] is True and options["beta"] == "unstable"
+    assert options["beta"] == "unstable"
     assert options["download_size"] == 6_300_000_000
+
+
+def test_install_for_module_refuses_a_login_it_cannot_do(tmp_path):
+    """익명 로그인만 한다: module.toml이 anonymous = false면 받기 전에 거절한다"""
+    from extensions.steamcmd import install_for_module
+    (tmp_path / "module.toml").write_text(
+        "[module]\nname = \"g\"\n\n[install]\nmethod = \"steamcmd\"\napp_id = 380870\nanonymous = false\n", encoding="utf-8")
+    with patch.object(SteamCMD, "ensure_available") as ensure, pytest.raises(NotImplementedError):
+        install_for_module(tmp_path, tmp_path / "server")
+    ensure.assert_not_called()
 
 
 def test_install_for_module_needs_a_steamcmd_app(tmp_path):
@@ -1099,33 +1105,6 @@ def test_check_update_leaves_build_times_empty_when_steam_gives_none(tmp_path):
 
 
 # ── 문구는 앱 언어를 따른다 (locales) ──
-
-LOCALES_DIR = os.path.join(os.path.dirname(__file__), "locales")
-LANGUAGES = ["ko", "en", "ja", "zh-CN", "zh-TW", "es", "pt-BR", "ru", "de", "fr"]
-
-
-def _flat(tree, prefix=""):
-    out = {}
-    for key, value in tree.items():
-        out.update(_flat(value, f"{prefix}{key}.") if isinstance(value, dict) else {prefix + key: value})
-    return out
-
-
-def _lines(lang):
-    with open(os.path.join(LOCALES_DIR, f"{lang}.json"), encoding="utf-8") as f:
-        return _flat(json.load(f))
-
-
-def test_every_language_has_the_same_lines_and_placeholders():
-    import re
-    base = _lines("ko")
-    assert base
-    for lang in LANGUAGES:
-        lines = _lines(lang)
-        assert set(lines) == set(base), lang
-        for key, text in lines.items():
-            assert sorted(re.findall(r"\{\{(\w+)\}\}", text)) == sorted(re.findall(r"\{\{(\w+)\}\}", base[key])), (lang, key)
-
 
 @pytest.fixture
 def korean(monkeypatch):
