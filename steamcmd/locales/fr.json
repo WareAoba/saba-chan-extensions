@@ -10,7 +10,6 @@
   },
   "errors": {
     "failed": "Échec de SteamCMD (code de sortie {{code}}) : {{detail}}",
-    "failed_after_retries": "SteamCMD en échec après plusieurs tentatives",
     "timed_out": "SteamCMD arrêté après dépassement du délai ({{seconds}} s)",
     "bootstrap_timed_out": "Délai dépassé pour le téléchargement de SteamCMD ({{seconds}} s)",
     "disk_write": "Échec de l'écriture dans le dossier d'installation. Vérifiez le disque, le droit d'écriture du dossier et un blocage par l'antivirus. ({{detail}})",

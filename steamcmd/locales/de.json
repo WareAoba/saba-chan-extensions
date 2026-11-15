@@ -10,7 +10,6 @@
   },
   "errors": {
     "failed": "SteamCMD fehlgeschlagen (Exitcode {{code}}): {{detail}}",
-    "failed_after_retries": "SteamCMD auch nach Wiederholungen fehlgeschlagen",
     "timed_out": "SteamCMD nach Zeitüberschreitung ({{seconds}} s) abgebrochen",
     "bootstrap_timed_out": "Zeitüberschreitung beim Download von SteamCMD ({{seconds}} s)",
     "disk_write": "Schreiben in den Installationsordner fehlgeschlagen. Prüfe Laufwerk, Schreibrechte des Ordners und Blockierung durch Antivirensoftware. ({{detail}})",

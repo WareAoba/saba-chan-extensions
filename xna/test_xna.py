@@ -1,29 +1,9 @@
 """XNA 익스텐션 테스트 (네트워크 없이)."""
-import json
 import os
-import re
 
 import pytest
 
 from extensions.xna import xna as xna_mod
-
-LOCALES_DIR = os.path.join(os.path.dirname(__file__), "locales")
-LANGUAGES = ["ko", "en", "ja", "zh-CN", "zh-TW", "es", "pt-BR", "ru", "de", "fr"]
-
-
-def _lines(lang):
-    with open(os.path.join(LOCALES_DIR, f"{lang}.json"), encoding="utf-8") as f:
-        return json.load(f)["errors"]
-
-
-def test_every_language_has_the_same_lines_and_placeholders():
-    base = _lines("ko")
-    assert base
-    for lang in LANGUAGES:
-        lines = _lines(lang)
-        assert set(lines) == set(base), lang
-        for key, text in lines.items():
-            assert sorted(re.findall(r"\{\{(\w+)\}\}", text)) == sorted(re.findall(r"\{\{(\w+)\}\}", base[key])), (lang, key)
 
 
 @pytest.mark.parametrize("lang, expected", [

@@ -7,14 +7,9 @@ game dedicated servers via Valve's SteamCMD CLI.
 This extension is used by game modules whose ``module.toml`` specifies
 ``method = "steamcmd"`` in the ``[install]`` section.
 
-Usage (from a game module lifecycle.py):
-    from extensions.steamcmd import SteamCMD
-
-    steam = SteamCMD()                      # auto-detects or bootstraps
-    steam.ensure_available()                 # downloads from Valve CDN if needed
-    steam.install(app_id=2394010,            # Palworld dedicated server
-                  install_dir="/srv/palworld/server",
-                  anonymous=True)
+Usage (from a game module lifecycle.py; app_id·beta come from the module's module.toml [install]):
+    from extensions.steamcmd import install_for_module
+    install_for_module(MODULE_DIR, install_dir)
 
 Daemon hook (server.check_update):
     python steamcmd.py check_update < context.json
@@ -34,7 +29,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from daemon_rcon import download, extension_data_dir, force_kill, progress, run_lifecycle, safe_extract
+from daemon_rcon import atomic_write, download, extension_data_dir, force_kill, progress, run_lifecycle, safe_extract
 from i18n import I18n
 
 i18n = I18n(os.path.dirname(os.path.abspath(__file__)))
@@ -391,15 +386,12 @@ class SteamCMD:
         app_id: int,
         install_dir: str | Path,
         *,
-        anonymous: bool = True,
         beta: Optional[str] = None,
-        beta_password: Optional[str] = None,
-        platform_override: Optional[str] = None,
         validate: Optional[bool] = None,
         timeout: Optional[float] = _INSTALL_BUDGET,
         download_size: int = 0,
     ) -> dict[str, Any]:
-        """Run ``steamcmd +app_update`` to install or update a game server.
+        """Run ``steamcmd +app_update`` (anonymous login) to install or update a game server.
 
         *download_size* 는 받을 파일의 대략적인 크기(바이트, 모듈 module.toml ``[install] download_size``)다.
         SteamCMD 출력과 appmanifest에서 크기를 읽지 못하는 동안 늘어난 디스크 크기로 진행률을 어림하는 데 쓴다.
@@ -422,9 +414,7 @@ class SteamCMD:
         install_dir = Path(install_dir)
         install_dir.mkdir(parents=True, exist_ok=True)
 
-        args = self._app_update_args(
-            app_id, install_dir, anonymous=anonymous, beta=beta, beta_password=beta_password,
-            platform_override=platform_override, validate=validate)
+        args = self._app_update_args(app_id, install_dir, beta=beta, validate=validate)
 
         if timeout is not None:
             timeout = max(0.0, timeout - self._bootstrap_secs)
@@ -501,52 +491,21 @@ class SteamCMD:
                 "app_id": app_id,
             }
 
-        # Should not reach here, but just in case
-        return {
-            "success": False,
-            "message": i18n.t("errors.failed_after_retries"),
-            "install_dir": None,
-            "app_id": app_id,
-        }
-
     def _app_update_args(
         self,
         app_id: int,
         install_dir: Path,
         *,
-        anonymous: bool,
         beta: Optional[str],
-        beta_password: Optional[str],
-        platform_override: Optional[str],
         validate: Optional[bool],
     ) -> list[str]:
         """``steamcmd +app_update`` 명령줄. 인자 뜻은 :meth:`install` 과 같다."""
-        args: list[str] = [str(self._path)]
-
-        # ── Login 전에 설정해야 하는 옵션들 ──
-
-        # Platform override (반드시 login 전)
-        if platform_override:
-            args += ["+@sSteamCmdForcePlatformType", platform_override]
-
-        # Install directory (반드시 login 전)
-        args += ["+force_install_dir", str(install_dir)]
-
-        # Login
-        if anonymous:
-            args += ["+login", "anonymous"]
-        else:
-            raise NotImplementedError(
-                "Non-anonymous SteamCMD login is not yet supported."
-            )
-
-        # App update
-        args += ["+app_update", str(app_id)]
+        # 설치 폴더는 login 전에 정해야 한다
+        args: list[str] = [str(self._path), "+force_install_dir", str(install_dir), "+login", "anonymous",
+                           "+app_update", str(app_id)]
         # 옵션과 값은 별도 argv 토큰이어야 steamcmd가 인식한다
         if beta:
             args += ["-beta", beta]
-            if beta_password:
-                args += ["-betapassword", beta_password]
         if validate is None:
             validate = not _fully_installed(str(install_dir), app_id)
         if validate:
@@ -554,15 +513,6 @@ class SteamCMD:
 
         args.append("+quit")
         return args
-
-    def update(
-        self,
-        app_id: int,
-        install_dir: str | Path,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        """Alias for :meth:`install` — SteamCMD handles incremental updates."""
-        return self.install(app_id, install_dir, **kwargs)
 
     # ── Buildid Fixup ────────────────────────────────────────
 
@@ -612,13 +562,7 @@ class SteamCMD:
                 content,
             )
             # 다 쓴 뒤 바꾼다: 쓰다 끊겨도 manifest가 잘린 채 남지 않게
-            tmp_path = manifest_path.with_name(f"{manifest_path.name}.{os.getpid()}.saba-tmp")
-            try:
-                tmp_path.write_text(new_content, encoding="utf-8")
-                os.replace(tmp_path, manifest_path)
-            finally:
-                if tmp_path.exists():
-                    tmp_path.unlink()
+            atomic_write(manifest_path, new_content.encode("utf-8"))
             _log(f"Fixed buildid for app {app_id}: {local_buildid} → {remote_buildid}")
 
         except Exception as e:
@@ -731,23 +675,6 @@ class SteamCMD:
         except Exception as e:
             _log(f"app_info_print failed: {e}")
             return None
-
-    # ── Status ───────────────────────────────────────────────
-
-    def status(self) -> dict[str, Any]:
-        """JSON-serialisable status blob for API responses."""
-        portable = None
-        try:
-            portable = str(_portable_dir())
-        except EnvironmentError:
-            pass
-
-        return {
-            "available": self.available,
-            "path": str(self._path) if self._path else None,
-            "portable_dir": portable,
-            "auto_bootstrap": True,
-        }
 
 
 # ── Utilities ────────────────────────────────────────────────────
@@ -968,27 +895,17 @@ def install_for_module(
     app_id = section.get("app_id")
     if section.get("method") != "steamcmd" or not isinstance(app_id, int) or app_id <= 0:
         raise ValueError("module.toml [install] needs method = \"steamcmd\" and a positive app_id")
+    if not section.get("anonymous", True):
+        raise NotImplementedError("Non-anonymous SteamCMD login is not yet supported.")
     steam = SteamCMD()
     steam.ensure_available()
     return steam.install(
         app_id,
         install_dir,
-        anonymous=bool(section.get("anonymous", True)),
         beta=beta or section.get("beta"),
         timeout=timeout,
         download_size=int(section.get("download_size") or 0),
     )
-
-
-def _plugin_ensure(config: dict) -> dict:
-    steam = SteamCMD(config.get("explicit_path"))
-    steam.ensure_available(timeout=config.get("timeout", 120))
-    return steam.status()
-
-
-def _plugin_status(config: dict) -> dict:
-    steam = SteamCMD(config.get("explicit_path"))
-    return steam.status()
 
 
 def _plugin_check_update(config: dict) -> dict:
@@ -1012,7 +929,6 @@ def _plugin_check_update(config: dict) -> dict:
             "error": i18n.t("errors.app_id_required"),
         }
 
-    # Even if SteamCMD isn't available, we can still report local buildid
     try:
         steam.ensure_available()
     except Exception as e:
@@ -1027,9 +943,6 @@ def _plugin_check_update(config: dict) -> dict:
 
 FUNCTIONS = {
     "check_update": _plugin_check_update,
-    # 수동 진단용
-    "ensure": _plugin_ensure,
-    "status": _plugin_status,
 }
 
 

@@ -8,10 +8,8 @@ Used by game modules that run on UE4 (Palworld, ARK, etc.).
 Usage:
     from extensions.ue4_ini import parse_option_settings, write_option_settings
 
-    props = parse_option_settings("/path/to/PalWorldSettings.ini")
-    props["Difficulty"] = "2"
-    write_option_settings("/path/to/PalWorldSettings.ini", props,
-                          section="/Script/Pal.PalGameWorldSettings")
+    props = parse_option_settings(ini_path)
+    write_option_settings(ini_path, {**props, "Difficulty": "2"})  # section 기본값은 [/Script/Pal.PalGameWorldSettings]
 
 라이브러리 전용 익스텐션이다 — 데몬 훅이 없고 모듈이 in-process로 import한다.
 """

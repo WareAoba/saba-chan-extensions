@@ -10,7 +10,6 @@
   },
   "errors": {
     "failed": "SteamCMD 失败(退出码 {{code}}):{{detail}}",
-    "failed_after_retries": "SteamCMD 重试后仍失败",
     "timed_out": "SteamCMD 超时({{seconds}} 秒),已中止",
     "bootstrap_timed_out": "SteamCMD 下载超时({{seconds}} 秒)",
     "disk_write": "向安装文件夹写入文件失败。请检查驱动器状态、文件夹写入权限和杀毒软件拦截。({{detail}})",

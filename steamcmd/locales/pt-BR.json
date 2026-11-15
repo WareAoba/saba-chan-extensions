@@ -10,7 +10,6 @@
   },
   "errors": {
     "failed": "Falha no SteamCMD (código de saída {{code}}): {{detail}}",
-    "failed_after_retries": "SteamCMD falhou mesmo após novas tentativas",
     "timed_out": "SteamCMD interrompido por tempo esgotado ({{seconds}} s)",
     "bootstrap_timed_out": "Tempo de download do SteamCMD esgotado ({{seconds}} s)",
     "disk_write": "Falha ao gravar na pasta de instalação. Verifique o drive, a permissão de gravação da pasta e o bloqueio do antivírus. ({{detail}})",

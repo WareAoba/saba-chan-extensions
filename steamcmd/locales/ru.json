@@ -10,7 +10,6 @@
   },
   "errors": {
     "failed": "Ошибка SteamCMD (код выхода {{code}}): {{detail}}",
-    "failed_after_retries": "SteamCMD завершился ошибкой и после повторных попыток",
     "timed_out": "SteamCMD остановлен по тайм-ауту ({{seconds}} с)",
     "bootstrap_timed_out": "Тайм-аут загрузки SteamCMD ({{seconds}} с)",
     "disk_write": "Не удалось записать файлы в папку установки. Проверьте диск, права на запись в папку и блокировку антивирусом. ({{detail}})",
