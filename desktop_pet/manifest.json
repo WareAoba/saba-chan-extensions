@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "desktop-pet",
-  "name": "Desktop Pet",
+  "name": "움직이는 사바쨩",
   "version": "0.1.2",
   "description": "Puts a small Saba-chan in a corner of your desktop who reacts to your servers",
   "descriptions": {
