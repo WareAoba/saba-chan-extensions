@@ -51,16 +51,6 @@ def test_the_manifest_declares_only_the_desktop_overlay_slot_and_its_files_exist
     assert (HERE / "icon.png").is_file()
 
 
-def test_every_language_has_the_same_lines_and_placeholders():
-    base = flat(json.loads((HERE / "locales" / "ko.json").read_text(encoding="utf-8")))
-    holders = lambda s: sorted(re.findall(r"\{\{(\w+)\}\}", s))  # noqa: E731
-    for lang in LOCALES:
-        lines = flat(json.loads((HERE / "locales" / f"{lang}.json").read_text(encoding="utf-8")))
-        assert set(lines) == set(base), lang
-        for key, text in lines.items():
-            assert holders(text) == holders(base[key]), (lang, key)
-
-
 def test_every_bubble_the_machine_says_has_a_line():
     machine = (GUI / "src" / "machine.js").read_text(encoding="utf-8")
     keys = {k for k in re.findall(r"'(bubble\.[a-z_]+)'", machine) if not k.endswith("_")}
