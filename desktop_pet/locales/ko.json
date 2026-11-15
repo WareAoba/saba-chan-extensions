@@ -6,7 +6,7 @@
     "mcp": "AI 에이전트",
     "chatbot": "말하는 사바쨩",
     "schedule": "예약 작업",
-    "external": "바깥 프로그램",
+    "external": "외부 프로그램",
     "gui": "사바쨩 앱",
     "cli": "CLI",
     "daemon": "사바쨩",
