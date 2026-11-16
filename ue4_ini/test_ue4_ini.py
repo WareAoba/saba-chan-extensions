@@ -10,6 +10,8 @@ import pytest
 
 from extensions.ue4_ini import parse_option_settings, write_option_settings
 
+PAL = "[/Script/Pal.PalGameWorldSettings]"
+
 
 def test_package_reexports_inner_module():
     from extensions.ue4_ini import ue4_ini
@@ -37,7 +39,7 @@ def test_parse_simple_key_values():
         f.write("OptionSettings=(Difficulty=2,DayTimeSpeedRate=1.000000,NightTimeSpeedRate=1.000000)\n")
         path = f.name
     try:
-        props = parse_option_settings(path)
+        props = parse_option_settings(path, PAL)
         assert props["Difficulty"] == "2"
         assert props["DayTimeSpeedRate"] == "1.000000"
         assert props["NightTimeSpeedRate"] == "1.000000"
@@ -52,7 +54,7 @@ def test_parse_quoted_values():
         f.write('OptionSettings=(ServerName="My Server, The Best",Port=8211)\n')
         path = f.name
     try:
-        props = parse_option_settings(path)
+        props = parse_option_settings(path, PAL)
         assert props["ServerName"] == "My Server, The Best"
         assert props["Port"] == "8211"
     finally:
@@ -66,7 +68,7 @@ def test_parse_parenthesized_values():
         f.write("OptionSettings=(Platforms=(Steam,Xbox),Port=8211)\n")
         path = f.name
     try:
-        props = parse_option_settings(path)
+        props = parse_option_settings(path, PAL)
         assert props["Platforms"] == "(Steam,Xbox)"
         assert props["Port"] == "8211"
     finally:
@@ -75,7 +77,7 @@ def test_parse_parenthesized_values():
 
 def test_parse_missing_file():
     """Non-existent file returns empty dict."""
-    props = parse_option_settings("/nonexistent/file.ini")
+    props = parse_option_settings("/nonexistent/file.ini", PAL)
     assert props == {}
 
 
@@ -85,7 +87,7 @@ def test_parse_no_option_settings():
         f.write("[SomeSection]\nKey=Value\n")
         path = f.name
     try:
-        props = parse_option_settings(path)
+        props = parse_option_settings(path, PAL)
         assert props == {}
     finally:
         os.unlink(path)
@@ -97,11 +99,11 @@ def test_write_and_read_roundtrip():
         path = os.path.join(tmpdir, "sub", "PalWorldSettings.ini")
         original = {"Difficulty": "2", "ServerName": "Test", "Port": "8211"}
 
-        ok = write_option_settings(path, original)
+        ok = write_option_settings(path, original, PAL)
         assert ok is True
         assert os.path.isfile(path)
 
-        result = parse_option_settings(path)
+        result = parse_option_settings(path, PAL)
         assert result["Difficulty"] == "2"
         assert result["ServerName"] == "Test"
         assert result["Port"] == "8211"
@@ -113,7 +115,7 @@ def test_write_quoted_values():
         path = os.path.join(tmpdir, "settings.ini")
         props = {"ServerName": "My Server, The Best", "Port": "8211"}
 
-        write_option_settings(path, props)
+        write_option_settings(path, props, PAL)
 
         with open(path, 'r') as f:
             content = f.read()
@@ -144,7 +146,7 @@ def test_write_password_quoted():
             "Port": "8211",
         }
 
-        write_option_settings(path, props)
+        write_option_settings(path, props, PAL)
 
         with open(path, 'r') as f:
             content = f.read()
@@ -156,7 +158,7 @@ def test_write_password_quoted():
         assert 'Port=8211' in content
 
         # Roundtrip: parsed values should match originals
-        result = parse_option_settings(path)
+        result = parse_option_settings(path, PAL)
         assert result["AdminPassword"] == "PDfsZyRKFzS3R6qj"
         assert result["ServerPassword"] == ""
         assert result["RESTAPIEnabled"] == "True"
@@ -170,7 +172,7 @@ def test_parse_boolean_values():
         f.write("OptionSettings=(RESTAPIEnabled=True,RCONEnabled=False,bIsMultiplay=True)\n")
         path = f.name
     try:
-        props = parse_option_settings(path)
+        props = parse_option_settings(path, PAL)
         assert props["RESTAPIEnabled"] == "True"
         assert props["RCONEnabled"] == "False"
         assert props["bIsMultiplay"] == "True"
@@ -193,7 +195,7 @@ def test_write_preserves_other_sections_and_comments(tmp_path):
         "Other=1\n",
         encoding="utf-8",
     )
-    assert write_option_settings(str(path), {"Difficulty": "2", "ServerName": "New"}) is True
+    assert write_option_settings(str(path), {"Difficulty": "2", "ServerName": "New"}, PAL) is True
     content = path.read_text(encoding="utf-8")
     assert "; header comment" in content
     assert "[/Script/Engine.Game]\nbUseFoo=True" in content
@@ -216,7 +218,7 @@ def test_write_appends_missing_section_without_dropping_content(tmp_path):
 def test_write_inserts_option_settings_into_existing_section(tmp_path):
     path = tmp_path / "settings.ini"
     path.write_text("[/Script/Pal.PalGameWorldSettings]\n; comment\n[Next]\nA=1\n", encoding="utf-8")
-    write_option_settings(str(path), {"Port": "8211"})
+    write_option_settings(str(path), {"Port": "8211"}, PAL)
     content = path.read_text(encoding="utf-8")
     assert content == "[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Port=8211)\n; comment\n[Next]\nA=1\n"
 
@@ -224,10 +226,10 @@ def test_write_inserts_option_settings_into_existing_section(tmp_path):
 def test_write_escapes_quotes_and_roundtrips(tmp_path):
     path = tmp_path / "settings.ini"
     props = {"ServerName": 'My "Best" Server, \\o/', "Port": "8211"}
-    write_option_settings(str(path), props)
+    write_option_settings(str(path), props, PAL)
     content = path.read_text(encoding="utf-8")
     assert 'ServerName="My \\"Best\\" Server, \\\\o/"' in content
-    assert parse_option_settings(str(path)) == props
+    assert parse_option_settings(str(path), PAL) == props
 
 
 def test_backslashes_the_user_wrote_survive_a_write_of_other_keys(tmp_path):
@@ -235,30 +237,30 @@ def test_backslashes_the_user_wrote_survive_a_write_of_other_keys(tmp_path):
     path = tmp_path / "settings.ini"
     original = 'ServerDescription="Line1\\nLine2 C:\\Saves",AdminPassword="a\\b\\\\c"'
     path.write_text(f"[/Script/Pal.PalGameWorldSettings]\nOptionSettings=({original},ServerName=\"A\")\n", encoding="utf-8")
-    props = parse_option_settings(str(path))
+    props = parse_option_settings(str(path), PAL)
     assert props["ServerDescription"] == "Line1\\nLine2 C:\\Saves"
     assert props["AdminPassword"] == "a\\b\\c"
     props["ServerName"] = "B"
-    assert write_option_settings(str(path), props)
+    assert write_option_settings(str(path), props, PAL)
     assert f"OptionSettings=({original},ServerName=\"B\")" in path.read_text(encoding="utf-8")
-    assert parse_option_settings(str(path)) == props
+    assert parse_option_settings(str(path), PAL) == props
 
 
 def test_write_matches_section_after_bom_and_keeps_bom(tmp_path):
     path = tmp_path / "settings.ini"
     path.write_bytes("[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Port=1)\n".encode("utf-8-sig"))
-    write_option_settings(str(path), {"Port": "8211"})
+    write_option_settings(str(path), {"Port": "8211"}, PAL)
     raw = path.read_bytes()
     assert raw.startswith(b"\xef\xbb\xbf")
     content = raw.decode("utf-8-sig")
     assert content == "[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(Port=8211)\n"
-    assert parse_option_settings(str(path)) == {"Port": "8211"}
+    assert parse_option_settings(str(path), PAL) == {"Port": "8211"}
 
 
 def test_write_keeps_crlf_line_endings(tmp_path):
     path = tmp_path / "settings.ini"
     path.write_bytes(b"[Other]\r\nKey=Value\r\n")
-    write_option_settings(str(path), {"Port": "8211"})
+    write_option_settings(str(path), {"Port": "8211"}, PAL)
     raw = path.read_bytes()
     assert b"\r\n" in raw and b"\n" not in raw.replace(b"\r\n", b"")
 
@@ -267,8 +269,8 @@ def test_write_quotes_names_that_only_start_with_a_parenthesis(tmp_path):
     path = str(tmp_path / "Settings.ini")
     props = {"ServerName": "(KR) Friends", "ServerDescription": "hi", "CrossplayPlatforms": "(Steam,Xbox)",
              "Odd": "(a)(b)", "Open": "(unclosed", "Rule": '(Name="foo)",Value=1)'}
-    write_option_settings(path, props)
-    assert parse_option_settings(path) == props
+    write_option_settings(path, props, PAL)
+    assert parse_option_settings(path, PAL) == props
     text = open(path, encoding="utf-8").read()
     assert 'ServerName="(KR) Friends"' in text and "CrossplayPlatforms=(Steam,Xbox)" in text
     assert 'Rule=(Name="foo)",Value=1)' in text
@@ -284,10 +286,10 @@ def test_files_saved_in_the_windows_locale_or_utf16_are_read_and_kept(tmp_path, 
     for encoding, raw in [("cp949", body.encode("cp949")), ("utf-16", body.encode("utf-16"))]:
         ini = tmp_path / f"{encoding}.ini"
         ini.write_bytes(raw)
-        assert parse_option_settings(str(ini))["ServerName"] == "한글서버", encoding
-        assert write_option_settings(str(ini), {"ServerName": "새 서버", "AdminPassword": "x"})
+        assert parse_option_settings(str(ini), PAL)["ServerName"] == "한글서버", encoding
+        assert write_option_settings(str(ini), {"ServerName": "새 서버", "AdminPassword": "x"}, PAL)
         assert ini.read_bytes().decode(encoding).count("새 서버") == 1, encoding
-        assert parse_option_settings(str(ini))["ServerName"] == "새 서버", encoding
+        assert parse_option_settings(str(ini), PAL)["ServerName"] == "새 서버", encoding
 
 
 def test_a_failed_write_leaves_the_old_file_whole(tmp_path, monkeypatch):
@@ -300,8 +302,8 @@ def test_a_failed_write_leaves_the_old_file_whole(tmp_path, monkeypatch):
 
     from extensions.ue4_ini import ue4_ini
     monkeypatch.setattr(ue4_ini, "atomic_write", broken)
-    assert write_option_settings(str(ini), {"ServerName": "new"}) is False
-    assert parse_option_settings(str(ini))["ServerName"] == "old"
+    assert write_option_settings(str(ini), {"ServerName": "new"}, PAL) is False
+    assert parse_option_settings(str(ini), PAL)["ServerName"] == "old"
     assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"], "no temp file is left"
 
 
@@ -311,7 +313,7 @@ def test_a_write_keeps_the_file_permissions(tmp_path):
     ini = tmp_path / "PalWorldSettings.ini"
     ini.write_text('[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
     os.chmod(ini, 0o600)
-    assert write_option_settings(str(ini), {"AdminPassword": "y"})
+    assert write_option_settings(str(ini), {"AdminPassword": "y"}, PAL)
     assert ini.stat().st_mode & 0o777 == 0o600
 
 
@@ -329,9 +331,9 @@ def test_a_write_keeps_a_restricted_windows_acl(tmp_path):
         # ACE 줄만 비교한다(끝의 처리 결과 줄은 OS 언어로 나온다)
         return [line.replace(str(ini), "").strip() for line in out.splitlines() if ":(" in line]
     before = acl()
-    assert write_option_settings(str(ini), {"AdminPassword": "y"})
+    assert write_option_settings(str(ini), {"AdminPassword": "y"}, PAL)
     assert acl() == before
-    assert parse_option_settings(str(ini))["AdminPassword"] == "y"
+    assert parse_option_settings(str(ini), PAL)["AdminPassword"] == "y"
 
 
 def test_a_write_through_a_symlink_updates_the_real_file(tmp_path):
@@ -343,9 +345,9 @@ def test_a_write_through_a_symlink_updates_the_real_file(tmp_path):
         os.symlink(real, link)
     except (OSError, NotImplementedError):
         pytest.skip("symlinks are not available")
-    assert write_option_settings(str(link), {"ServerName": "new"})
+    assert write_option_settings(str(link), {"ServerName": "new"}, PAL)
     assert link.is_symlink()
-    assert parse_option_settings(str(real))["ServerName"] == "new"
+    assert parse_option_settings(str(real), PAL)["ServerName"] == "new"
 
 
 def test_a_write_first_restores_a_backup_left_by_an_interrupted_replace(tmp_path):
@@ -354,9 +356,9 @@ def test_a_write_first_restores_a_backup_left_by_an_interrupted_replace(tmp_path
     ini = tmp_path / "PalWorldSettings.ini"
     backup = tmp_path / "PalWorldSettings.ini.saba-bak"
     backup.write_text('[Other]\nKept=1\n[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(AdminPassword="x")\n', encoding="utf-8")
-    assert write_option_settings(str(ini), {"AdminPassword": "y"})
+    assert write_option_settings(str(ini), {"AdminPassword": "y"}, PAL)
     assert "[Other]\nKept=1" in ini.read_text(encoding="utf-8")
-    assert parse_option_settings(str(ini))["AdminPassword"] == "y"
+    assert parse_option_settings(str(ini), PAL)["AdminPassword"] == "y"
     assert [p.name for p in tmp_path.iterdir()] == ["PalWorldSettings.ini"]
 
 
@@ -364,31 +366,31 @@ def test_keys_declared_as_strings_stay_quoted_even_when_the_value_looks_like_a_n
     """숫자·nan·inf처럼 보이는 비밀번호도 문자열 키면 따옴표로 쓴다 (값 모양으로만 가리면 틀린다)"""
     path = str(tmp_path / "Settings.ini")
     props = {"ServerPassword": "12345678", "AdminPassword": "nan", "ServerName": "inf", "Region": " 12 ", "ExpRate": "2.5"}
-    assert write_option_settings(path, props, quoted_keys={"ServerPassword", "AdminPassword", "ServerName", "Region"})
+    assert write_option_settings(path, props, PAL, quoted_keys={"ServerPassword", "AdminPassword", "ServerName", "Region"})
     text = open(path, encoding="utf-8").read()
     assert 'ServerPassword="12345678"' in text and 'AdminPassword="nan"' in text and 'Region=" 12 "' in text
     assert "ExpRate=2.5" in text
-    assert parse_option_settings(path) == props
+    assert parse_option_settings(path, PAL) == props
 
 
 def test_nan_inf_and_padded_numbers_are_not_written_as_bare_numbers(tmp_path):
     path = str(tmp_path / "Settings.ini")
     props = {"A": "nan", "B": "inf", "C": " 12 ", "D": "1_0", "E": "-3", "F": "0.500000"}
-    assert write_option_settings(path, props)
+    assert write_option_settings(path, props, PAL)
     text = open(path, encoding="utf-8").read()
     assert 'A="nan"' in text and 'B="inf"' in text and 'C=" 12 "' in text and 'D="1_0"' in text
     assert "E=-3" in text and "F=0.500000" in text
-    assert parse_option_settings(path) == props
+    assert parse_option_settings(path, PAL) == props
 
 
 def test_bare_keys_write_enum_names_without_quotes(tmp_path):
     """Difficulty=None, DeathPenalty=All 처럼 열거형은 공식 기본 파일과 같이 따옴표 없이 쓴다"""
     path = str(tmp_path / "Settings.ini")
     props = {"Difficulty": "None", "DeathPenalty": "All", "DenyTechnologyList": "", "ServerName": "x"}
-    assert write_option_settings(path, props, bare_keys={"Difficulty", "DeathPenalty", "DenyTechnologyList"})
+    assert write_option_settings(path, props, PAL, bare_keys={"Difficulty", "DeathPenalty", "DenyTechnologyList"})
     text = open(path, encoding="utf-8").read()
     assert "Difficulty=None,DeathPenalty=All,DenyTechnologyList=,ServerName=\"x\"" in text
-    assert parse_option_settings(path) == props
+    assert parse_option_settings(path, PAL) == props
 
 
 def test_a_value_with_a_line_break_is_refused_and_the_file_is_untouched(tmp_path):
@@ -397,7 +399,7 @@ def test_a_value_with_a_line_break_is_refused_and_the_file_is_untouched(tmp_path
     path.write_text("[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName=\"keep\")\n", encoding="utf-8")
     before = path.read_bytes()
     for bad in ("x\ny", "x\r\ny", "x\ry"):
-        assert write_option_settings(str(path), {"ServerName": bad}) is False
+        assert write_option_settings(str(path), {"ServerName": bad}, PAL) is False
     assert path.read_bytes() == before
 
 
@@ -410,10 +412,25 @@ def test_parse_unclosed_option_line_is_unreadable(tmp_path, line):
     """닫는 괄호가 없거나 짝이 안 맞으면 일부만 읽지 않고 빈 dict (호출 모듈이 손상으로 본다)."""
     ini = tmp_path / "s.ini"
     ini.write_text("[/Script/X.Y]\n" + line + "\n", encoding="utf-8")
-    assert parse_option_settings(str(ini)) == {}
+    assert parse_option_settings(str(ini), "[/Script/X.Y]") == {}
 
 
 def test_parse_closed_outer_paren_with_nested_and_quoted_parens(tmp_path):
     ini = tmp_path / "s.ini"
     ini.write_text('[/Script/X.Y]\nOptionSettings=(A=1,B=(Steam,Xbox),C="a)b")\n', encoding="utf-8")
-    assert parse_option_settings(str(ini)) == {"A": "1", "B": "(Steam,Xbox)", "C": "a)b"}
+    assert parse_option_settings(str(ini), "[/Script/X.Y]") == {"A": "1", "B": "(Steam,Xbox)", "C": "a)b"}
+
+
+def test_read_and_write_use_the_section_the_caller_names(tmp_path):
+    """범용 UE4 도구라 섹션 기본값(특정 게임)을 두지 않는다. 읽기도 쓰기와 같은 섹션의 OptionSettings만 본다"""
+    ini = tmp_path / "Game.ini"
+    ini.write_text("[/Script/A.Settings]\nOptionSettings=(Port=1)\n[/Script/B.Settings]\nOptionSettings=(Port=2)\n",
+                   encoding="utf-8")
+    assert parse_option_settings(str(ini), "[/Script/B.Settings]") == {"Port": "2"}
+    assert write_option_settings(str(ini), {"Port": "3"}, "/Script/B.Settings")
+    assert parse_option_settings(str(ini), "/Script/B.Settings") == {"Port": "3"}
+    assert parse_option_settings(str(ini), "[/Script/A.Settings]") == {"Port": "1"}
+    with pytest.raises(TypeError):
+        parse_option_settings(str(ini))
+    with pytest.raises(TypeError):
+        write_option_settings(str(ini), {"Port": "4"})
