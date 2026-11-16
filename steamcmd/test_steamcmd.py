@@ -1174,3 +1174,13 @@ def test_install_walks_a_slow_folder_less_often(fake_steamcmd, monkeypatch):
     assert max(b[0] - a[0] for a, b in zip(during, during[1:])) <= 30, during
     percents = [pct for _, pct in during]
     assert percents == sorted(percents) and percents[-1] > percents[0], percents
+
+
+def test_bootstrap_progress_text_goes_through_locales(monkeypatch, tmp_path):
+    """SteamCMD를 받는 동안의 진행 문구도 locales를 거친다 (숫자만 인자로 넘긴다)"""
+    reported = []
+    monkeypatch.setattr(steamcmd_mod, "progress", lambda pct, msg: reported.append(msg))
+    monkeypatch.setattr(steamcmd_mod, "download",
+                        lambda url, dest, *, on_progress, **k: on_progress(1_048_576, 2_097_152))
+    steamcmd_mod._download_archive("https://example.invalid/steamcmd.zip", str(tmp_path / "s.zip"), timeout=60)
+    assert reported == [steamcmd_mod.i18n.t("messages.bootstrap_downloading", done="1.0", total="2.0")]

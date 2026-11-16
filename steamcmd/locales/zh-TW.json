@@ -1,5 +1,6 @@
 {
   "messages": {
+    "bootstrap_downloading": "正在下載 SteamCMD：{{done}}/{{total}} MB",
     "connecting": "連線 Steam 中...",
     "downloading": "正在下載：{{done}}/{{total}} MB",
     "downloading_percent": "正在下載：{{done}}/{{total}} MB ({{percent}}%)",

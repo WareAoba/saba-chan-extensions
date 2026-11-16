@@ -864,7 +864,8 @@ def _download_archive(url: str, dest: str, *, timeout: int) -> None:
         if total > 0:
             raw_pct = min(int(downloaded * 100 / total), 100)
             if raw_pct != last_pct[0]:
-                progress(raw_pct * 2 // 100, f"SteamCMD: {downloaded / 1_048_576:.1f}/{total / 1_048_576:.1f} MB")
+                progress(raw_pct * 2 // 100, i18n.t("messages.bootstrap_downloading",
+                                                     done=f"{downloaded / 1_048_576:.1f}", total=f"{total / 1_048_576:.1f}"))
                 last_pct[0] = raw_pct
 
     download(url, dest, on_progress=on_progress, timeout=min(timeout, _READ_TIMEOUT), user_agent="saba-chan/1.0")
