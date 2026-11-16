@@ -5,14 +5,12 @@
     "remote": "удалённый ПК",
     "mcp": "ИИ-агент",
     "chatbot": "Говорящая Saba-chan",
-    "schedule": "расписание",
     "external": "другая программа",
     "gui": "Приложение Saba-chan",
     "cli": "CLI",
-    "daemon": "Saba-chan",
-    "auto_update": "Автообновление",
     "game": "В игре",
-    "api": "API"
+    "api": "API",
+    "auto": "Автоматически"
   },
   "bubble": {
     "started": "{{server}} запущен",

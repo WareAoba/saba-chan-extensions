@@ -94,6 +94,8 @@ var module = { exports: {} };
 
     /** 켜고 끈 일은 어디서 시켰든 말풍선으로 알린다(앱 안에서 누른 것도). 자동 재시작은 '복구 완료'가 따로 알린다 */
     var SILENT_SOURCES = ['restart'];
+    // 사람이 시킨 게 아니라 사바쨩이 스스로 한 일: 말풍선 출처는 모두 "자동" 하나로 보인다
+    var AUTO_SOURCES = ['idle', 'restart', 'watchdog', 'schedule', 'auto_update', 'daemon'];
 
     /** 바쁜 장면: 이 동안에는 마우스·사소한 일로 장면을 바꾸지 않는다 */
     var BUSY = ['collapse', 'repair', 'cooking'];
@@ -228,7 +230,7 @@ var module = { exports: {} };
             var id = data.instanceId;
             var name = data.instance || '';
             // 시킨 쪽: 출처, 이름(디스코드 표시 이름·원격 PC 이름), 장소(디스코드 서버 이름)
-            var who = { source: data.source };
+            var who = { source: AUTO_SOURCES.indexOf(data.source) < 0 ? data.source : 'auto' };
             if (data.userName) who.user = data.userName;
             if (data.guildName) who.place = data.guildName;
             var told = SILENT_SOURCES.indexOf(data.source) < 0;

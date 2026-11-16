@@ -5,14 +5,12 @@
     "remote": "um PC remoto",
     "mcp": "um agente de IA",
     "chatbot": "Saba-chan falante",
-    "schedule": "uma tarefa agendada",
     "external": "outro programa",
     "gui": "App do Saba-chan",
     "cli": "CLI",
-    "daemon": "Saba-chan",
-    "auto_update": "Atualização automática",
     "game": "No jogo",
-    "api": "API"
+    "api": "API",
+    "auto": "Automático"
   },
   "bubble": {
     "started": "{{server}} iniciado",

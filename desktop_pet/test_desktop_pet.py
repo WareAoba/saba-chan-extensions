@@ -268,6 +268,33 @@ def test_things_done_in_the_app_get_a_bubble_too():
 
 
 @needs_node
+def test_things_saba_chan_did_by_itself_show_as_auto():
+    # 사용자 11-17: 사람이 시킨 게 아니면(자동 정지·감시·예약·자동 업데이트·데몬) 출처는 모두 "자동"으로만
+    r = run_node(
+        SCENARIO
+        + """
+        const out = {};
+        for (const source of ['idle', 'watchdog', 'schedule', 'auto_update', 'daemon', 'gui']) {
+            t += 20000;
+            pet.event('instance.stopped', { instanceId: source, instance: source, source });
+            out[source] = at().bubbles.find((b) => b.id === 'srv:' + source).vars.who;
+        }
+        console.log(JSON.stringify(out));
+        """
+    )
+    for source in ["idle", "watchdog", "schedule", "auto_update", "daemon"]:
+        assert r[source] == {"source": "auto"}, source
+    assert r["gui"] == {"source": "gui"}
+
+
+def test_every_language_names_the_auto_source():
+    for path in sorted((HERE / "locales").glob("*.json")):
+        sources = json.loads(path.read_text(encoding="utf-8"))["source"]
+        assert sources.get("auto"), path.name
+        assert not {"schedule", "auto_update", "daemon"} & sources.keys(), path.name
+
+
+@needs_node
 def test_tasks_at_the_same_time_stack_with_finished_ones_on_top():
     # 사용자 11-11: 여러 작업이 동시에 돌면 겹쳐 쌓고, 끝난 작업을 위로 끌어올린다
     r = run_node(
