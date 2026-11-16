@@ -468,7 +468,7 @@ def test_resolve_manifest_path_layouts(tmp_path):
     assert resolve_manifest_path(str(game), 222) == outer
 
 
-def test_check_update_uses_the_branch_the_daemon_gives(tmp_path):
+def test_check_update_uses_the_branch_the_daemon_gives(tmp_path, monkeypatch):
     """데몬 context의 branch(사용자가 고른 브랜치, 없으면 모듈 [install] beta)가 원격 buildid 브랜치가 된다."""
     steamapps = tmp_path / "steamapps"
     steamapps.mkdir()
@@ -480,13 +480,12 @@ def test_check_update_uses_the_branch_the_daemon_gives(tmp_path):
      unstable
        buildid: 200
 """
-    exe = tmp_path / "steamcmd.exe"
-    exe.write_text("")
+    (tmp_path / steamcmd_mod._EXE_NAME).write_text("")
+    monkeypatch.setattr(steamcmd_mod, "_portable_dir", lambda: tmp_path)
     with patch.object(SteamCMD, "_app_info_print", return_value=raw):
         result = steamcmd_mod.FUNCTIONS["check_update"]({
             "install": {"app_id": 380870},
             "install_dir": str(tmp_path),
-            "explicit_path": str(exe),
             "branch": "unstable",
         })
     assert result["remote_buildid"] == "200"
@@ -665,7 +664,7 @@ def test_cli_reports_errors_as_json_with_exit_zero():
     assert result["success"] is False and "nope" in result["message"]
 
 
-def test_check_update_flags_a_branch_switch_even_to_an_older_build(tmp_path):
+def test_check_update_flags_a_branch_switch_even_to_an_older_build(tmp_path, monkeypatch):
     """설치된 브랜치와 대상 브랜치가 다르면 buildid가 더 작아도 업데이트로 본다."""
     steamapps = tmp_path / "steamapps"
     steamapps.mkdir()
@@ -680,11 +679,11 @@ def test_check_update_flags_a_branch_switch_even_to_an_older_build(tmp_path):
      unstable
        buildid: 200
 """
-    exe = tmp_path / "steamcmd.exe"
-    exe.write_text("")
+    (tmp_path / steamcmd_mod._EXE_NAME).write_text("")
+    monkeypatch.setattr(steamcmd_mod, "_portable_dir", lambda: tmp_path)
     with patch.object(SteamCMD, "_app_info_print", return_value=raw):
         result = steamcmd_mod.FUNCTIONS["check_update"]({
-            "install": {"app_id": 380870}, "install_dir": str(tmp_path), "explicit_path": str(exe),
+            "install": {"app_id": 380870}, "install_dir": str(tmp_path),
         })
     assert result["local_branch"] == "unstable"
     assert result["update_available"] is True

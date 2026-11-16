@@ -915,7 +915,7 @@ def _plugin_check_update(config: dict) -> dict:
     앱 ID는 데몬이 준 모듈 ``[install]``(config.install), 브랜치는 config.branch(사용자가 고른 브랜치, 없으면
     모듈 ``[install] beta``)이고 없으면 "public"이다 (saba-core 0.1.14-beta.2).
     """
-    steam = SteamCMD(config.get("explicit_path"))
+    steam = SteamCMD()
     app_id = (config.get("install") or {}).get("app_id")
     install_dir = config.get("install_dir", "")
     branch = config.get("branch") or "public"
