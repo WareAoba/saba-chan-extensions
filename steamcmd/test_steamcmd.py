@@ -952,6 +952,31 @@ def test_install_for_module_reads_the_app_from_module_toml(tmp_path):
     assert options["download_size"] == 6_300_000_000
 
 
+def test_install_for_module_answers_what_the_daemon_reads_from_install_server(tmp_path):
+    """모듈 install_server가 그대로 돌려줄 답: 설치 폴더(install_path)와 받은 서버 실행 파일(executable_path, 없으면 "").
+    받지 못하면 예외가 아니라 locales 문구의 실패로 답한다 (모듈마다 같은 흐름을 되풀이하지 않는다)"""
+    from extensions.steamcmd import install_for_module
+    module = tmp_path / "game"
+    module.mkdir()
+    (module / "module.toml").write_text(
+        "[module]\nname = \"g\"\n\n[install]\nmethod = \"steamcmd\"\napp_id = 380870\n", encoding="utf-8")
+    server = tmp_path / "server"
+
+    def fake_install(self, app_id, install_dir, **k):
+        install_dir.mkdir(parents=True, exist_ok=True)
+        (install_dir / "Start.bat").write_text("")
+        return {"success": True}
+
+    with patch.object(SteamCMD, "ensure_available", lambda self, **k: None), patch.object(SteamCMD, "install", fake_install):
+        result = install_for_module(module, server, executable="Start.bat")
+    assert result == {"success": True, "install_path": str(server), "executable_path": str(server / "Start.bat")}
+    with patch.object(SteamCMD, "ensure_available", lambda self, **k: None), patch.object(SteamCMD, "install", lambda *a, **k: {"success": True}):
+        assert install_for_module(module, tmp_path / "empty", executable="Start.bat")["executable_path"] == ""
+    with patch.object(SteamCMD, "ensure_available", side_effect=OSError("offline")):
+        failed = install_for_module(module, server, executable="Start.bat")
+    assert failed == {"success": False, "message": steamcmd_mod.i18n.t("errors.install_failed", error="offline")}
+
+
 def test_install_for_module_refuses_a_login_it_cannot_do(tmp_path):
     """익명 로그인만 한다: module.toml이 anonymous = false면 받기 전에 거절한다"""
     from extensions.steamcmd import install_for_module

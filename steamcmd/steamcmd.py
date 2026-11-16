@@ -882,11 +882,14 @@ def install_for_module(
     *,
     beta: Optional[str] = None,
     timeout: Optional[float] = _INSTALL_BUDGET,
+    executable: Optional[str] = None,
 ) -> dict[str, Any]:
     """모듈 module.toml ``[install]``(``method = "steamcmd"``, ``app_id``, ``anonymous``, ``beta``, ``download_size``)대로
     게임 서버를 설치·업데이트한다. 앱 ID를 모듈 코드에 다시 적지 않게 한다 (선언은 module.toml 한 곳).
 
-    SteamCMD가 없으면 받아 온다. 반환은 :meth:`SteamCMD.install` 과 같다.
+    SteamCMD가 없으면 받아 온다. 반환은 :meth:`SteamCMD.install` 과 같고, 받거나 설치하다 난 오류도
+    ``{success: False, message}``로 답한다. *executable* (설치 폴더 기준 서버 실행 파일)을 주면 모듈 ``install_server``가
+    그대로 돌려줄 ``install_path``·``executable_path``(받은 파일이 없으면 "")를 붙인다.
     ``[install]``에 steamcmd 앱 ID가 없으면 ``ValueError``.
     """
     import tomllib
@@ -899,14 +902,23 @@ def install_for_module(
     if not section.get("anonymous", True):
         raise NotImplementedError("Non-anonymous SteamCMD login is not yet supported.")
     steam = SteamCMD()
-    steam.ensure_available()
-    return steam.install(
-        app_id,
-        install_dir,
-        beta=beta or section.get("beta"),
-        timeout=timeout,
-        download_size=int(section.get("download_size") or 0),
-    )
+    try:
+        steam.ensure_available()
+        result = steam.install(
+            app_id,
+            install_dir,
+            beta=beta or section.get("beta"),
+            timeout=timeout,
+            download_size=int(section.get("download_size") or 0),
+        )
+    except Exception as e:
+        _log(f"install failed for app {app_id}: {e}")
+        return {"success": False, "message": i18n.t("errors.install_failed", error=str(e))}
+    if executable and result.get("success"):
+        exe = Path(install_dir) / executable
+        result["install_path"] = str(install_dir)
+        result["executable_path"] = str(exe) if exe.exists() else ""
+    return result
 
 
 def _plugin_check_update(config: dict) -> dict:
