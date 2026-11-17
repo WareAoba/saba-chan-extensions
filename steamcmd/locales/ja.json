@@ -1,5 +1,6 @@
 {
   "messages": {
+    "bootstrap_downloading": "SteamCMDをダウンロード中: {{done}}/{{total}} MB",
     "connecting": "Steam に接続中...",
     "downloading": "ダウンロード中: {{done}}/{{total}} MB",
     "downloading_percent": "ダウンロード中: {{done}}/{{total}} MB ({{percent}}%)",

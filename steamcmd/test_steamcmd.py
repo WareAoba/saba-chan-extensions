@@ -468,7 +468,7 @@ def test_resolve_manifest_path_layouts(tmp_path):
     assert resolve_manifest_path(str(game), 222) == outer
 
 
-def test_check_update_uses_the_branch_the_daemon_gives(tmp_path):
+def test_check_update_uses_the_branch_the_daemon_gives(tmp_path, monkeypatch):
     """데몬 context의 branch(사용자가 고른 브랜치, 없으면 모듈 [install] beta)가 원격 buildid 브랜치가 된다."""
     steamapps = tmp_path / "steamapps"
     steamapps.mkdir()
@@ -480,13 +480,12 @@ def test_check_update_uses_the_branch_the_daemon_gives(tmp_path):
      unstable
        buildid: 200
 """
-    exe = tmp_path / "steamcmd.exe"
-    exe.write_text("")
+    (tmp_path / steamcmd_mod._EXE_NAME).write_text("")
+    monkeypatch.setattr(steamcmd_mod, "_portable_dir", lambda: tmp_path)
     with patch.object(SteamCMD, "_app_info_print", return_value=raw):
         result = steamcmd_mod.FUNCTIONS["check_update"]({
             "install": {"app_id": 380870},
             "install_dir": str(tmp_path),
-            "explicit_path": str(exe),
             "branch": "unstable",
         })
     assert result["remote_buildid"] == "200"
@@ -665,7 +664,7 @@ def test_cli_reports_errors_as_json_with_exit_zero():
     assert result["success"] is False and "nope" in result["message"]
 
 
-def test_check_update_flags_a_branch_switch_even_to_an_older_build(tmp_path):
+def test_check_update_flags_a_branch_switch_even_to_an_older_build(tmp_path, monkeypatch):
     """설치된 브랜치와 대상 브랜치가 다르면 buildid가 더 작아도 업데이트로 본다."""
     steamapps = tmp_path / "steamapps"
     steamapps.mkdir()
@@ -680,11 +679,11 @@ def test_check_update_flags_a_branch_switch_even_to_an_older_build(tmp_path):
      unstable
        buildid: 200
 """
-    exe = tmp_path / "steamcmd.exe"
-    exe.write_text("")
+    (tmp_path / steamcmd_mod._EXE_NAME).write_text("")
+    monkeypatch.setattr(steamcmd_mod, "_portable_dir", lambda: tmp_path)
     with patch.object(SteamCMD, "_app_info_print", return_value=raw):
         result = steamcmd_mod.FUNCTIONS["check_update"]({
-            "install": {"app_id": 380870}, "install_dir": str(tmp_path), "explicit_path": str(exe),
+            "install": {"app_id": 380870}, "install_dir": str(tmp_path),
         })
     assert result["local_branch"] == "unstable"
     assert result["update_available"] is True
@@ -953,6 +952,31 @@ def test_install_for_module_reads_the_app_from_module_toml(tmp_path):
     assert options["download_size"] == 6_300_000_000
 
 
+def test_install_for_module_answers_what_the_daemon_reads_from_install_server(tmp_path):
+    """모듈 install_server가 그대로 돌려줄 답: 설치 폴더(install_path)와 받은 서버 실행 파일(executable_path, 없으면 "").
+    받지 못하면 예외가 아니라 locales 문구의 실패로 답한다 (모듈마다 같은 흐름을 되풀이하지 않는다)"""
+    from extensions.steamcmd import install_for_module
+    module = tmp_path / "game"
+    module.mkdir()
+    (module / "module.toml").write_text(
+        "[module]\nname = \"g\"\n\n[install]\nmethod = \"steamcmd\"\napp_id = 380870\n", encoding="utf-8")
+    server = tmp_path / "server"
+
+    def fake_install(self, app_id, install_dir, **k):
+        install_dir.mkdir(parents=True, exist_ok=True)
+        (install_dir / "Start.bat").write_text("")
+        return {"success": True}
+
+    with patch.object(SteamCMD, "ensure_available", lambda self, **k: None), patch.object(SteamCMD, "install", fake_install):
+        result = install_for_module(module, server, executable="Start.bat")
+    assert result == {"success": True, "install_path": str(server), "executable_path": str(server / "Start.bat")}
+    with patch.object(SteamCMD, "ensure_available", lambda self, **k: None), patch.object(SteamCMD, "install", lambda *a, **k: {"success": True}):
+        assert install_for_module(module, tmp_path / "empty", executable="Start.bat")["executable_path"] == ""
+    with patch.object(SteamCMD, "ensure_available", side_effect=OSError("offline")):
+        failed = install_for_module(module, server, executable="Start.bat")
+    assert failed == {"success": False, "message": steamcmd_mod.i18n.t("errors.install_failed", error="offline")}
+
+
 def test_install_for_module_refuses_a_login_it_cannot_do(tmp_path):
     """익명 로그인만 한다: module.toml이 anonymous = false면 받기 전에 거절한다"""
     from extensions.steamcmd import install_for_module
@@ -1174,3 +1198,13 @@ def test_install_walks_a_slow_folder_less_often(fake_steamcmd, monkeypatch):
     assert max(b[0] - a[0] for a, b in zip(during, during[1:])) <= 30, during
     percents = [pct for _, pct in during]
     assert percents == sorted(percents) and percents[-1] > percents[0], percents
+
+
+def test_bootstrap_progress_text_goes_through_locales(monkeypatch, tmp_path):
+    """SteamCMD를 받는 동안의 진행 문구도 locales를 거친다 (숫자만 인자로 넘긴다)"""
+    reported = []
+    monkeypatch.setattr(steamcmd_mod, "progress", lambda pct, msg: reported.append(msg))
+    monkeypatch.setattr(steamcmd_mod, "download",
+                        lambda url, dest, *, on_progress, **k: on_progress(1_048_576, 2_097_152))
+    steamcmd_mod._download_archive("https://example.invalid/steamcmd.zip", str(tmp_path / "s.zip"), timeout=60)
+    assert reported == [steamcmd_mod.i18n.t("messages.bootstrap_downloading", done="1.0", total="2.0")]

@@ -1,5 +1,6 @@
 {
   "messages": {
+    "bootstrap_downloading": "Baixando o SteamCMD: {{done}}/{{total}} MB",
     "connecting": "Conectando ao Steam...",
     "downloading": "Baixando: {{done}}/{{total}} MB",
     "downloading_percent": "Baixando: {{done}}/{{total}} MB ({{percent}}%)",

@@ -8,8 +8,9 @@ Used by game modules that run on UE4 (Palworld, ARK, etc.).
 Usage:
     from extensions.ue4_ini import parse_option_settings, write_option_settings
 
-    props = parse_option_settings(ini_path)
-    write_option_settings(ini_path, {**props, "Difficulty": "2"})  # section 기본값은 [/Script/Pal.PalGameWorldSettings]
+    section = "[/Script/Pal.PalGameWorldSettings]"  # 게임마다 다른 섹션을 호출하는 모듈이 정한다
+    props = parse_option_settings(ini_path, section)
+    write_option_settings(ini_path, {**props, "Difficulty": "2"}, section)
 
 라이브러리 전용 익스텐션이다 — 데몬 훅이 없고 모듈이 in-process로 import한다.
 """
@@ -42,12 +43,14 @@ def _read_text(ini_path):
     raise AssertionError("latin-1 decodes any bytes")
 
 
-def parse_option_settings(ini_path):
+def parse_option_settings(ini_path, section):
     """Parse UE4 INI OptionSettings into a dict.
 
     Handles the UE4 format:
       [/Script/Some.Settings]
       OptionSettings=(Key1=Val1,Key2=Val2,...)
+
+    *section* 섹션의 OptionSettings 줄만 읽는다(쓰기와 같은 섹션, 대괄호는 있어도 없어도 된다).
 
     Supports:
     - Quoted string values with commas: Key="Value with, commas"
@@ -56,6 +59,7 @@ def parse_option_settings(ini_path):
 
     Args:
         ini_path: Path to the .ini file.
+        section: INI section header, with or without brackets.
 
     Returns:
         dict of key-value pairs, or empty dict if file missing/unparseable.
@@ -64,7 +68,9 @@ def parse_option_settings(ini_path):
         return {}
     try:
         content, _ = _read_text(ini_path)
-        body = _option_settings_body(content)
+        lines = content.splitlines()
+        _, found = _find_option_line(lines, _header(section))
+        body = _option_settings_body(lines[found]) if found is not None else None
         if body is None:
             return {}
         return {key: value for key, (value, _) in _split_option_settings(body).items()}
@@ -209,6 +215,10 @@ def _format_option_settings(props, quoted_keys=(), bare_keys=(), original=None):
     return f"OptionSettings=({','.join(parts)})"
 
 
+def _header(section):
+    return section if section.startswith("[") else f"[{section}]"
+
+
 def _find_option_line(lines, header):
     """(*header* 줄 위치, 그 섹션의 OptionSettings 줄 위치). 섹션이 없으면 (None, None), 줄이 없으면 (헤더, None)."""
     start = next((i for i, line in enumerate(lines) if line.strip() == header), None)
@@ -238,7 +248,7 @@ def _merge_option_settings(lines, header, option_line):
     return lines
 
 
-def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSettings]", quoted_keys=(), bare_keys=()):
+def write_option_settings(ini_path, props, section, quoted_keys=(), bare_keys=()):
     """Write dict back to UE4 INI OptionSettings format.
 
     기존 파일이 있으면 해당 섹션의 OptionSettings 줄만 바꾼다.
@@ -247,7 +257,7 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
     Args:
         ini_path: Path to the .ini file.
         props: dict of key-value pairs.
-        section: INI section header, with or without brackets (default: Palworld settings).
+        section: INI section header, with or without brackets.
         quoted_keys: 값이 숫자·nan처럼 보여도 항상 따옴표로 쓸 문자열 키 (비밀번호, 서버 이름 등).
         bare_keys: 항상 따옴표 없이 쓸 키 (열거형 Difficulty=None, 빈 목록 등).
 
@@ -257,7 +267,7 @@ def write_option_settings(ini_path, props, section="[/Script/Pal.PalGameWorldSet
     if any(isinstance(v, str) and ("\n" in v or "\r" in v) for v in props.values()):
         print("[ue4_ini] write refused: value with a line break", file=sys.stderr)
         return False
-    header = section if section.startswith("[") else f"[{section}]"
+    header = _header(section)
     # 링크면 가리키는 파일을 고친다 (교체가 링크를 일반 파일로 바꾸지 않게)
     ini_path = os.path.realpath(ini_path)
     try:
