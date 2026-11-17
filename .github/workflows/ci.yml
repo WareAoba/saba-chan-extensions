@@ -1,4 +1,5 @@
-# saba-chan-extensions — critical lint (E9, F63, F7, F82) + pytest
+# saba-chan-extensions — critical lint (E9, F63, F7, F82) + pytest,
+# 이 익스텐션을 쓰는 모듈 저장소 시험(예: palworld ↔ ue4_ini)
 #
 # PR: Windows에서만 돌린다. 익스텐션은 Windows 데몬에서 실행되고,
 #     Ubuntu pytest는 클라우드 작업에서 매번 돌린다.
@@ -8,6 +9,9 @@ name: CI
 on:
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -21,28 +25,28 @@ jobs:
       matrix:
         os: ${{ github.event_name == 'workflow_dispatch' && fromJSON('["windows-latest","ubuntu-latest"]') || fromJSON('["windows-latest"]') }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      # daemon_rcon.py: 데몬이 넣어 주는 공용 파일. 데몬 저장소에 같은 이름의 브랜치가 있으면 그것을 쓴다
-      - name: Pick the saba-chan branch
-        id: core
+      - uses: actions/checkout@v7
+      # daemon_rcon.py: 데몬이 넣어 주는 공용 파일. 데몬·모듈 저장소에 같은 이름의 브랜치가 있으면 그것을 쓴다
+      - name: Pick the saba-chan and modules branches
+        id: refs
         shell: bash
         env:
           BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
-          if git ls-remote --exit-code --heads https://github.com/WareAoba/saba-chan "$BRANCH" >/dev/null; then
-            echo "ref=$BRANCH" >> "$GITHUB_OUTPUT"
-          else
-            echo "ref=main" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: actions/checkout@v4
+          for repo in saba-chan saba-chan-modules; do
+            ref=main
+            if git ls-remote --exit-code --heads "https://github.com/WareAoba/$repo" "$BRANCH" >/dev/null; then ref="$BRANCH"; fi
+            echo "$repo=$ref" >> "$GITHUB_OUTPUT"
+          done
+      - uses: actions/checkout@v7
         with:
           repository: WareAoba/saba-chan
-          ref: ${{ steps.core.outputs.ref }}
+          ref: ${{ steps.refs.outputs.saba-chan }}
           path: saba-chan
           sparse-checkout: modules
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: python -m pip install pytest ruff
@@ -50,3 +54,20 @@ jobs:
       - run: python -m pytest -q
         env:
           SABA_RUNTIME_DIR: ${{ github.workspace }}/saba-chan/modules
+      # 이 익스텐션 판으로 모듈 계약·단위 테스트 (모듈 저장소 CI와 같은 명령).
+      # 위 pytest가 모듈 저장소 시험까지 줍지 않도록 그 뒤에 받는다
+      - uses: actions/checkout@v7
+        with:
+          repository: WareAoba/saba-chan-modules
+          ref: ${{ steps.refs.outputs.saba-chan-modules }}
+          path: saba-chan-modules
+      - name: Modules with these extensions
+        working-directory: saba-chan-modules
+        shell: bash
+        env:
+          SABA_RUNTIME_DIR: ${{ github.workspace }}/saba-chan/modules
+          SABA_EXTENSIONS_DIR: ${{ github.workspace }}
+        run: |
+          python -m pip install -q -r requirements-dev.txt
+          python -m pytest conformance -q --shared-libs "$SABA_RUNTIME_DIR"
+          python -m pytest -q
