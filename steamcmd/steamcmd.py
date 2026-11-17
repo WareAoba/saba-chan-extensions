@@ -478,15 +478,13 @@ class SteamCMD:
                 time.sleep(3)
                 continue
 
-            # 앞부분은 배너라 원인이 잘린다: 마지막 ERROR! 줄을 보이고, 없으면 끝부분을 보인다
-            errors = [line.strip() for line in stdout.splitlines() if line.strip().upper().startswith("ERROR!")]
-            detail = errors[-1] if errors else stdout[-2000:]
+            detail = _failure_detail(stdout)
             _log(f"SteamCMD failed for app {app_id}: {detail}")
             cause = next((key for reason, key in _PERMANENT_FAILURES.items() if reason in stdout), None)
             return {
                 "success": False,
                 "message": i18n.t(cause, detail=detail) if cause
-                else i18n.t("errors.failed", code=returncode, detail=detail),
+                else i18n.t("errors.failed", code=_exit_code(returncode), detail=detail),
                 "install_dir": None,
                 "app_id": app_id,
             }
@@ -607,6 +605,8 @@ class SteamCMD:
                         failure = i18n.t("errors.no_buildid", branch=branch)
                 else:
                     failure = i18n.t("errors.app_info_empty")
+            except SteamCMDFailed as e:
+                failure = str(e)
             except Exception as e:
                 _log(f"Failed to query remote buildid for app {app_id}: {e}")
                 failure = i18n.t("errors.app_info_failed", error=e)
@@ -648,7 +648,8 @@ class SteamCMD:
     def _app_info_print(self, app_id: int) -> Optional[str]:
         """Run ``steamcmd +app_info_update 1 +app_info_print <appid> +quit``.
 
-        Returns the raw stdout text, or None on failure.
+        Returns the raw stdout text, or None on failure. SteamCMD가 0이 아닌 코드로 끝나면 ``SteamCMDFailed``
+        (자체 업데이트를 해도 명령을 마저 돌리고 0으로 끝난다. 0이 아니면 앱 정보를 받지 못한 것이다).
         """
         if not self.available:
             return None
@@ -671,13 +672,30 @@ class SteamCMD:
                 timeout=60,
                 creationflags=_creation_flags(),
             )
-            return result.stdout
         except Exception as e:
             _log(f"app_info_print failed: {e}")
             return None
+        if result.returncode != 0:
+            raise SteamCMDFailed(i18n.t("errors.failed", code=_exit_code(result.returncode), detail=_failure_detail(result.stdout)))
+        return result.stdout
 
 
 # ── Utilities ────────────────────────────────────────────────────
+
+
+class SteamCMDFailed(RuntimeError):
+    """SteamCMD가 0이 아닌 코드로 끝났다. 메시지는 사용자에게 보일 문구다."""
+
+
+def _failure_detail(stdout: str) -> str:
+    """SteamCMD가 실패한 까닭: 앞부분은 배너라 원인이 잘린다. 마지막 ERROR! 줄, 없으면 끝부분."""
+    errors = [line.strip() for line in stdout.splitlines() if line.strip().upper().startswith("ERROR!")]
+    return errors[-1] if errors else stdout[-2000:].strip()
+
+
+def _exit_code(code: int) -> str:
+    """종료 코드. 음수는 Windows 예외 코드라 16진수로 보인다 (-1073741571 → 0xC00000FD)."""
+    return f"0x{code & 0xFFFFFFFF:08X}" if code < 0 else str(code)
 
 
 def resolve_manifest_path(install_dir: str, app_id: int) -> Optional[Path]:

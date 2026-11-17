@@ -634,6 +634,7 @@ def test_app_info_print_decodes_utf8_with_replace(tmp_path, monkeypatch):
         seen.update(kwargs)
 
         class R:
+            returncode = 0
             stdout = "ok"
         return R()
 
@@ -1208,3 +1209,21 @@ def test_bootstrap_progress_text_goes_through_locales(monkeypatch, tmp_path):
                         lambda url, dest, *, on_progress, **k: on_progress(1_048_576, 2_097_152))
     steamcmd_mod._download_archive("https://example.invalid/steamcmd.zip", str(tmp_path / "s.zip"), timeout=60)
     assert reported == [steamcmd_mod.i18n.t("messages.bootstrap_downloading", done="1.0", total="2.0")]
+
+
+def test_check_update_reports_the_exit_code_when_steamcmd_dies(tmp_path, monkeypatch):
+    """SteamCMD가 출력 없이 죽으면(낮은 무결성으로 뜬 포터블 SteamCMD 등) 빌드 번호가 없다고 하지 않고 종료 코드를 알린다."""
+    exe = tmp_path / "steamcmd.exe"
+    exe.write_text("")
+
+    def fake_run(args, **kwargs):
+        class R:
+            returncode = -1073741571
+            stdout = "Redirecting stderr to 'logs\\stderr.txt'\n"
+        return R()
+
+    monkeypatch.setattr(steamcmd_mod.subprocess, "run", fake_run)
+    result = SteamCMD(explicit_path=str(exe)).check_update(app_id=2394010, install_dir=str(tmp_path))
+    assert result["reason"] == "check_failed"
+    assert "0xC00000FD" in result["error"]
+    assert "public" not in result["error"]
