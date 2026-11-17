@@ -5,14 +5,12 @@
     "remote": "リモートPC",
     "mcp": "AIエージェント",
     "chatbot": "おしゃべりサバちゃん",
-    "schedule": "予約タスク",
     "external": "外部プログラム",
     "gui": "サバちゃんアプリ",
     "cli": "CLI",
-    "daemon": "サバちゃん",
-    "auto_update": "自動アップデート",
     "game": "ゲーム内",
-    "api": "API"
+    "api": "API",
+    "auto": "自動"
   },
   "bubble": {
     "started": "{{server}} 起動完了",
