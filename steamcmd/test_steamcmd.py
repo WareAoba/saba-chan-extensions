@@ -1227,3 +1227,20 @@ def test_check_update_reports_the_exit_code_when_steamcmd_dies(tmp_path, monkeyp
     assert result["reason"] == "check_failed"
     assert "0xC00000FD" in result["error"]
     assert "public" not in result["error"]
+
+
+def test_check_update_reads_the_buildid_even_when_steamcmd_exits_after_a_self_update(tmp_path, monkeypatch):
+    """SteamCMD가 스스로 업데이트하고 코드 7로 끝나도 앱 정보를 출력했으면 그 빌드 번호로 확인한다."""
+    exe = tmp_path / "steamcmd.exe"
+    exe.write_text("")
+
+    def fake_run(args, **kwargs):
+        class R:
+            returncode = 7
+            stdout = "[----] Update complete, launching...\nbranches\n  public\n    buildid: 200\n"
+        return R()
+
+    monkeypatch.setattr(steamcmd_mod.subprocess, "run", fake_run)
+    result = SteamCMD(explicit_path=str(exe)).check_update(app_id=2394010, install_dir=str(tmp_path))
+    assert result["remote_buildid"] == "200"
+    assert "reason" not in result

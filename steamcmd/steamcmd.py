@@ -648,8 +648,8 @@ class SteamCMD:
     def _app_info_print(self, app_id: int) -> Optional[str]:
         """Run ``steamcmd +app_info_update 1 +app_info_print <appid> +quit``.
 
-        Returns the raw stdout text, or None on failure. SteamCMD가 0이 아닌 코드로 끝나면 ``SteamCMDFailed``
-        (자체 업데이트를 해도 명령을 마저 돌리고 0으로 끝난다. 0이 아니면 앱 정보를 받지 못한 것이다).
+        Returns the raw stdout text, or None on failure. SteamCMD가 0이 아닌 코드로 끝나고 출력에 빌드 번호도 없으면
+        ``SteamCMDFailed`` (자체 업데이트 뒤 코드 7로 끝나도 앱 정보를 출력했으면 그 출력을 쓴다).
         """
         if not self.available:
             return None
@@ -675,7 +675,7 @@ class SteamCMD:
         except Exception as e:
             _log(f"app_info_print failed: {e}")
             return None
-        if result.returncode != 0:
+        if result.returncode != 0 and "buildid" not in result.stdout:
             raise SteamCMDFailed(i18n.t("errors.failed", code=_exit_code(result.returncode), detail=_failure_detail(result.stdout)))
         return result.stdout
 
