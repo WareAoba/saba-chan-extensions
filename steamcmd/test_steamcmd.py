@@ -1244,3 +1244,28 @@ def test_check_update_reads_the_buildid_even_when_steamcmd_exits_after_a_self_up
     result = SteamCMD(explicit_path=str(exe)).check_update(app_id=2394010, install_dir=str(tmp_path))
     assert result["remote_buildid"] == "200"
     assert "reason" not in result
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="가짜 steamcmd.sh는 셸 스크립트다")
+def test_processes_sharing_the_portable_steamcmd_run_it_one_at_a_time(tmp_path):
+    """데몬은 설치·업데이트 확인을 여러 프로세스로 함께 돌린다. 같은 포터블 SteamCMD 폴더는 한 번에 하나만 쓴다."""
+    import daemon_rcon
+    root = tmp_path / "root"
+    portable = root / "steamcmd"
+    portable.mkdir(parents=True)
+    log = tmp_path / "runs.log"
+    exe = portable / "steamcmd.sh"
+    exe.write_text(f'#!/bin/sh\necho start >> "{log}"\nsleep 1\necho end >> "{log}"\n'
+                   'printf "branches\\n  public\\n    buildid: 5\\n"\n')
+    exe.chmod(0o755)
+    env = dict(os.environ, PYTHONPATH=os.path.dirname(daemon_rcon.__file__), SABA_EXTENSION_DATA_ROOT=str(root))
+    context = json.dumps({"install": {"app_id": 1}, "install_dir": str(tmp_path)})
+    runs = [subprocess.Popen([sys.executable, steamcmd_mod.__file__, "check_update"], stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE, text=True, env=env) for _ in range(2)]
+    for run in runs:
+        run.stdin.write(context)
+        run.stdin.close()
+    for run in runs:
+        assert json.loads(run.stdout.read())["remote_buildid"] == "5"
+        run.wait(timeout=60)
+    assert log.read_text().split() == ["start", "end", "start", "end"]
