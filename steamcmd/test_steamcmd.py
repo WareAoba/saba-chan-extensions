@@ -1246,26 +1246,36 @@ def test_check_update_reads_the_buildid_even_when_steamcmd_exits_after_a_self_up
     assert "reason" not in result
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="가짜 steamcmd.sh는 셸 스크립트다")
-def test_processes_sharing_the_portable_steamcmd_run_it_one_at_a_time(tmp_path):
-    """데몬은 설치·업데이트 확인을 여러 프로세스로 함께 돌린다. 같은 포터블 SteamCMD 폴더는 한 번에 하나만 쓴다."""
+def test_processes_bootstrapping_together_download_once(tmp_path):
+    """데몬은 설치 여러 개를 각각의 Python으로 함께 돌린다. 같은 포터블 폴더에 함께 받아 풀지 않고,
+    기다린 쪽은 먼저 받은 쪽이 풀어 둔 SteamCMD를 쓴다."""
     import daemon_rcon
+    log = tmp_path / "downloads.log"
+    script = tmp_path / "bootstrap.py"
+    script.write_text(f"""
+import importlib.util, io, tarfile, time
+spec = importlib.util.spec_from_file_location("steamcmd", {steamcmd_mod.__file__!r})
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+def fake_download(url, dest, *, timeout):
+    with open({str(log)!r}, "a") as f:
+        f.write("start\\n")
+    time.sleep(1)
+    with tarfile.open(dest, "w:gz") as tf:
+        tf.addfile(tarfile.TarInfo(mod._EXE_NAME), io.BytesIO(b""))
+    with open({str(log)!r}, "a") as f:
+        f.write("end\\n")
+
+mod._download_archive = fake_download
+steam = mod.SteamCMD()
+steam.ensure_available()
+print(steam.path)
+""", encoding="utf-8")
     root = tmp_path / "root"
-    portable = root / "steamcmd"
-    portable.mkdir(parents=True)
-    log = tmp_path / "runs.log"
-    exe = portable / "steamcmd.sh"
-    exe.write_text(f'#!/bin/sh\necho start >> "{log}"\nsleep 1\necho end >> "{log}"\n'
-                   'printf "branches\\n  public\\n    buildid: 5\\n"\n')
-    exe.chmod(0o755)
     env = dict(os.environ, PYTHONPATH=os.path.dirname(daemon_rcon.__file__), SABA_EXTENSION_DATA_ROOT=str(root))
-    context = json.dumps({"install": {"app_id": 1}, "install_dir": str(tmp_path)})
-    runs = [subprocess.Popen([sys.executable, steamcmd_mod.__file__, "check_update"], stdin=subprocess.PIPE,
-                             stdout=subprocess.PIPE, text=True, env=env) for _ in range(2)]
-    for run in runs:
-        run.stdin.write(context)
-        run.stdin.close()
-    for run in runs:
-        assert json.loads(run.stdout.read())["remote_buildid"] == "5"
-        run.wait(timeout=60)
-    assert log.read_text().split() == ["start", "end", "start", "end"]
+    runs = [subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, text=True, env=env) for _ in range(2)]
+    paths = [run.communicate(timeout=60)[0].strip() for run in runs]
+    assert all(run.returncode == 0 for run in runs)
+    assert paths == [str(root / "steamcmd" / steamcmd_mod._EXE_NAME)] * 2
+    assert log.read_text().split() == ["start", "end"]

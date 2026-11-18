@@ -65,9 +65,6 @@ _READ_TIMEOUT = 30
 # 데몬이 Python을 죽이기 전에 steamcmd를 직접 종료한다 (고아 프로세스 방지). 설치는 같은 객체의 받기가 실제로 쓴 시간만 뺀다
 _INSTALL_BUDGET = 1740
 
-# 업데이트 확인이 다른 SteamCMD 실행을 기다리는 시간. app_info_print 제한(60초)과 합해 데몬의 check_update 제한(120초)보다 짧게
-_INFO_LOCK_WAIT = 50
-
 # 설치 진행률 모니터링 주기 (초)
 _POLL_INTERVAL = 2.0
 
@@ -175,26 +172,13 @@ def _portable_dir() -> Path:
     return extension_data_dir(_PORTABLE_SUBDIR)
 
 
-# 이 프로세스가 잡은 포터블 SteamCMD 잠금 수 (설치 중 buildid 교정이 같은 잠금을 다시 잡는다)
-_lock_depth = 0
-
-
 @contextlib.contextmanager
-def _steamcmd_lock(deadline: Optional[float]):
-    """포터블 SteamCMD를 받고 풀고 실행하는 일을 프로세스 사이에서 한 번에 하나씩 한다.
+def _bootstrap_lock(deadline: float):
+    """포터블 SteamCMD 받기·풀기를 프로세스 사이에서 한 번에 하나씩 한다.
 
-    데몬은 설치 여러 개와 업데이트 확인을 각각의 Python으로 함께 돌리고, 모두 같은 포터블 폴더를 쓴다.
-    *deadline* (``time.monotonic``)까지 잡지 못하면 ``TimeoutError``. ``None`` 이면 기다린다.
-    잠금은 프로세스가 끝나면 OS가 푼다.
+    데몬은 설치 여러 개를 각각의 Python으로 함께 돌리고, 모두 같은 포터블 폴더에 받는다.
+    *deadline* (``time.monotonic``)까지 잡지 못하면 ``TimeoutError``. 잠금은 프로세스가 끝나면 OS가 푼다.
     """
-    global _lock_depth
-    if _lock_depth:
-        _lock_depth += 1
-        try:
-            yield
-        finally:
-            _lock_depth -= 1
-        return
     portable = _portable_dir()
     portable.mkdir(parents=True, exist_ok=True)
     with open(portable / ".saba.lock", "a+b") as handle:
@@ -209,14 +193,12 @@ def _steamcmd_lock(deadline: Optional[float]):
                     fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
             except OSError:
-                if deadline is not None and time.monotonic() >= deadline:
-                    raise TimeoutError("another SteamCMD run holds the portable SteamCMD") from None
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("another process is downloading SteamCMD") from None
                 time.sleep(0.5)
-        _lock_depth = 1
         try:
             yield
         finally:
-            _lock_depth = 0
             if _SYSTEM == "Windows":
                 handle.seek(0)
                 msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
@@ -388,11 +370,11 @@ class SteamCMD:
             self._path = exe_path
             return
 
-        # 받기·풀기는 잠금 안에서 한다 (함께 도는 설치가 같은 폴더에 풀거나 SteamCMD를 실행하는 중일 수 있다).
+        # 받기·풀기는 잠금 안에서 한다 (함께 도는 설치가 같은 폴더에 받아 푸는 중일 수 있다).
         # 기다린 시간도 받기에 쓴 시간이다: 설치가 남은 시간에서 뺀다
         started = time.monotonic()
         try:
-            with _steamcmd_lock(started + timeout):
+            with _bootstrap_lock(started + timeout):
                 self._bootstrap(portable, exe_path, timeout)
         finally:
             self._bootstrap_secs += time.monotonic() - started
@@ -483,77 +465,74 @@ class SteamCMD:
             timeout = max(0.0, timeout - self._bootstrap_secs)
         deadline = time.monotonic() + timeout if timeout is not None else None
 
-        # 같은 포터블 SteamCMD를 쓰는 다른 설치·업데이트 확인이 끝나기를 기다린다. 기다린 시간도 제한 시간에 든다
-        with contextlib.ExitStack() as held:
-            try:
-                held.enter_context(_steamcmd_lock(deadline))
-            except TimeoutError:
-                _log(f"SteamCMD stayed busy for {timeout} s; app {app_id} not installed")
-                return _timed_out(app_id, timeout)
+        # SteamCMD commonly exits with code 7 on first run (self-update).
+        # Retry up to 3 times to handle this.
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            _log(f"Running (attempt {attempt}/{max_attempts}): {' '.join(args)}")
 
-            # SteamCMD commonly exits with code 7 on first run (self-update).
-            # Retry up to 3 times to handle this.
-            max_attempts = 3
-            for attempt in range(1, max_attempts + 1):
-                _log(f"Running (attempt {attempt}/{max_attempts}): {' '.join(args)}")
+            # 설치 전 디렉터리 초기 크기 측정 (install_dir + steamcmd 캐시)
+            steamcmd_cache = self._path.parent / "steamapps"
+            initial_size = _dir_size(install_dir)
+            if steamcmd_cache.exists():
+                initial_size += _dir_size(steamcmd_cache)
 
-                # 설치 전 디렉터리 초기 크기 측정 (install_dir + steamcmd 캐시)
-                steamcmd_cache = self._path.parent / "steamapps"
-                initial_size = _dir_size(install_dir)
-                if steamcmd_cache.exists():
-                    initial_size += _dir_size(steamcmd_cache)
+            proc = subprocess.Popen(
+                args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                creationflags=_creation_flags(),
+            )
+            stdout = _watch_install(proc, app_id, install_dir, steamcmd_cache, initial_size, deadline, download_size)
 
-                proc = subprocess.Popen(
-                    args,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    creationflags=_creation_flags(),
-                )
-                stdout = _watch_install(proc, app_id, install_dir, steamcmd_cache, initial_size, deadline, download_size)
-
-                if stdout is None:
-                    # steamcmd.sh는 실제 steamcmd를 자식으로 띄운다: 직계만 끝내면 손자가 남아 install_dir에 계속 쓴다
-                    force_kill(proc.pid)
-                    proc.kill()
-                    proc.wait(timeout=10)
-                    _log(f"SteamCMD timed out after {timeout} s for app {app_id}; process killed")
-                    return _timed_out(app_id, timeout)
-
-                returncode = proc.returncode
-
-                if returncode == 0 or "Success! App" in stdout:
-                    progress(100, i18n.t("messages.installed"))
-                    _log(f"SteamCMD install completed for app {app_id}")
-
-                    # SteamCMD validate는 파일 검증만 하고 appmanifest의 buildid를
-                    # 교정하지 않을 수 있음. 설치한 브랜치의 원격 buildid로 manifest를 갱신.
-                    self._fix_local_buildid(app_id, install_dir, branch=beta or "public")
-
-                    return {
-                        "success": True,
-                        "message": i18n.t("messages.install_done", app_id=app_id, install_dir=install_dir),
-                        "install_dir": str(install_dir),
-                        "app_id": app_id,
-                    }
-
-                # Exit code 7: SteamCMD self-updated or transient failure -- retry.
-                # Exit code 8: 첫 실행의 'Missing configuration' 등은 다시 돌리면 풀린다 (영구 원인은 빼고)
-                permanent = any(reason in stdout for reason in _PERMANENT_FAILURES)
-                if (returncode == 7 or (returncode == 8 and not permanent)) and attempt < max_attempts:
-                    _log(f"SteamCMD exited with code {returncode} (attempt {attempt}) -- retrying...")
-                    time.sleep(3)
-                    continue
-
-                detail = _failure_detail(stdout)
-                _log(f"SteamCMD failed for app {app_id}: {detail}")
-                cause = next((key for reason, key in _PERMANENT_FAILURES.items() if reason in stdout), None)
+            if stdout is None:
+                # steamcmd.sh는 실제 steamcmd를 자식으로 띄운다: 직계만 끝내면 손자가 남아 install_dir에 계속 쓴다
+                force_kill(proc.pid)
+                proc.kill()
+                proc.wait(timeout=10)
+                _log(f"SteamCMD timed out after {timeout} s for app {app_id}; process killed")
                 return {
                     "success": False,
-                    "message": i18n.t(cause, detail=detail) if cause
-                    else i18n.t("errors.failed", code=_exit_code(returncode), detail=detail),
+                    "message": i18n.t("errors.timed_out", seconds=f"{timeout:.0f}"),
                     "install_dir": None,
                     "app_id": app_id,
                 }
+
+            returncode = proc.returncode
+
+            if returncode == 0 or "Success! App" in stdout:
+                progress(100, i18n.t("messages.installed"))
+                _log(f"SteamCMD install completed for app {app_id}")
+
+                # SteamCMD validate는 파일 검증만 하고 appmanifest의 buildid를
+                # 교정하지 않을 수 있음. 설치한 브랜치의 원격 buildid로 manifest를 갱신.
+                self._fix_local_buildid(app_id, install_dir, branch=beta or "public")
+
+                return {
+                    "success": True,
+                    "message": i18n.t("messages.install_done", app_id=app_id, install_dir=install_dir),
+                    "install_dir": str(install_dir),
+                    "app_id": app_id,
+                }
+
+            # Exit code 7: SteamCMD self-updated or transient failure -- retry.
+            # Exit code 8: 첫 실행의 'Missing configuration' 등은 다시 돌리면 풀린다 (영구 원인은 빼고)
+            permanent = any(reason in stdout for reason in _PERMANENT_FAILURES)
+            if (returncode == 7 or (returncode == 8 and not permanent)) and attempt < max_attempts:
+                _log(f"SteamCMD exited with code {returncode} (attempt {attempt}) -- retrying...")
+                time.sleep(3)
+                continue
+
+            detail = _failure_detail(stdout)
+            _log(f"SteamCMD failed for app {app_id}: {detail}")
+            cause = next((key for reason, key in _PERMANENT_FAILURES.items() if reason in stdout), None)
+            return {
+                "success": False,
+                "message": i18n.t(cause, detail=detail) if cause
+                else i18n.t("errors.failed", code=_exit_code(returncode), detail=detail),
+                "install_dir": None,
+                "app_id": app_id,
+            }
 
     def _app_update_args(
         self,
@@ -728,36 +707,25 @@ class SteamCMD:
             "+quit",
         ]
 
-        # 다른 설치·확인이 SteamCMD를 쓰는 중이면 기다린다. 데몬의 check_update 제한(120초) 안에 끝나게 기다림을 줄인다
-        with _steamcmd_lock(time.monotonic() + _INFO_LOCK_WAIT):
-            try:
-                # steamcmd 출력은 UTF-8이다 — 로케일(cp949 등) 디코딩은 실패할 수 있다
-                result = subprocess.run(
-                    args,
-                    capture_output=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=60,
-                    creationflags=_creation_flags(),
-                )
-            except Exception as e:
-                _log(f"app_info_print failed: {e}")
-                return None
+        try:
+            # steamcmd 출력은 UTF-8이다 — 로케일(cp949 등) 디코딩은 실패할 수 있다
+            result = subprocess.run(
+                args,
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=60,
+                creationflags=_creation_flags(),
+            )
+        except Exception as e:
+            _log(f"app_info_print failed: {e}")
+            return None
         if result.returncode != 0 and "buildid" not in result.stdout:
             raise SteamCMDFailed(i18n.t("errors.failed", code=_exit_code(result.returncode), detail=_failure_detail(result.stdout)))
         return result.stdout
 
 
 # ── Utilities ────────────────────────────────────────────────────
-
-
-def _timed_out(app_id: int, timeout: Optional[float]) -> dict[str, Any]:
-    return {
-        "success": False,
-        "message": i18n.t("errors.timed_out", seconds=f"{timeout:.0f}"),
-        "install_dir": None,
-        "app_id": app_id,
-    }
 
 
 class SteamCMDFailed(RuntimeError):
