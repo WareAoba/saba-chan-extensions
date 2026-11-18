@@ -43,7 +43,7 @@ def _read_text(ini_path):
     raise AssertionError("latin-1 decodes any bytes")
 
 
-def parse_option_settings(ini_path, section):
+def parse_option_settings(ini_path, section=None):
     """Parse UE4 INI OptionSettings into a dict.
 
     Handles the UE4 format:
@@ -51,6 +51,7 @@ def parse_option_settings(ini_path, section):
       OptionSettings=(Key1=Val1,Key2=Val2,...)
 
     *section* 섹션의 OptionSettings 줄만 읽는다(쓰기와 같은 섹션, 대괄호는 있어도 없어도 된다).
+    ``None`` 이면 파일의 첫 OptionSettings 줄을 읽는다(섹션을 넘기지 않던 0.1.11까지의 호출).
 
     Supports:
     - Quoted string values with commas: Key="Value with, commas"
@@ -59,7 +60,7 @@ def parse_option_settings(ini_path, section):
 
     Args:
         ini_path: Path to the .ini file.
-        section: INI section header, with or without brackets.
+        section: INI section header, with or without brackets. None: the section of the first OptionSettings line.
 
     Returns:
         dict of key-value pairs, or empty dict if file missing/unparseable.
@@ -69,7 +70,7 @@ def parse_option_settings(ini_path, section):
     try:
         content, _ = _read_text(ini_path)
         lines = content.splitlines()
-        _, found = _find_option_line(lines, _header(section))
+        _, found = _find_option_line(lines, _header(section) if section is not None else _first_option_header(lines))
         body = _option_settings_body(lines[found]) if found is not None else None
         if body is None:
             return {}
@@ -219,8 +220,21 @@ def _header(section):
     return section if section.startswith("[") else f"[{section}]"
 
 
+def _first_option_header(lines):
+    """파일의 첫 OptionSettings 줄이 든 섹션의 헤더. 그런 줄이 없으면 None."""
+    header = None
+    for line in lines:
+        if line.lstrip().startswith("["):
+            header = line.strip()
+        elif line.lstrip().startswith("OptionSettings="):
+            return header
+    return None
+
+
 def _find_option_line(lines, header):
     """(*header* 줄 위치, 그 섹션의 OptionSettings 줄 위치). 섹션이 없으면 (None, None), 줄이 없으면 (헤더, None)."""
+    if header is None:
+        return None, None
     start = next((i for i, line in enumerate(lines) if line.strip() == header), None)
     if start is None:
         return None, None
@@ -248,7 +262,7 @@ def _merge_option_settings(lines, header, option_line):
     return lines
 
 
-def write_option_settings(ini_path, props, section, quoted_keys=(), bare_keys=()):
+def write_option_settings(ini_path, props, section=None, quoted_keys=(), bare_keys=()):
     """Write dict back to UE4 INI OptionSettings format.
 
     기존 파일이 있으면 해당 섹션의 OptionSettings 줄만 바꾼다.
@@ -257,7 +271,8 @@ def write_option_settings(ini_path, props, section, quoted_keys=(), bare_keys=()
     Args:
         ini_path: Path to the .ini file.
         props: dict of key-value pairs.
-        section: INI section header, with or without brackets.
+        section: INI section header, with or without brackets. None (0.1.11까지의 호출): 파일의 첫 OptionSettings 줄이
+            든 섹션. 그런 줄이 없으면 섹션을 지어내지 않고 쓰지 않는다.
         quoted_keys: 값이 숫자·nan처럼 보여도 항상 따옴표로 쓸 문자열 키 (비밀번호, 서버 이름 등).
         bare_keys: 항상 따옴표 없이 쓸 키 (열거형 Difficulty=None, 빈 목록 등).
 
@@ -267,7 +282,7 @@ def write_option_settings(ini_path, props, section, quoted_keys=(), bare_keys=()
     if any(isinstance(v, str) and ("\n" in v or "\r" in v) for v in props.values()):
         print("[ue4_ini] write refused: value with a line break", file=sys.stderr)
         return False
-    header = _header(section)
+    header = _header(section) if section is not None else None
     # 링크면 가리키는 파일을 고친다 (교체가 링크를 일반 파일로 바꾸지 않게)
     ini_path = os.path.realpath(ini_path)
     try:
@@ -284,6 +299,11 @@ def write_option_settings(ini_path, props, section, quoted_keys=(), bare_keys=()
             if "\r\n" in content:
                 newline = "\r\n"
             lines = content.splitlines()
+        if header is None:
+            header = _first_option_header(lines)
+            if header is None:
+                print("[ue4_ini] write refused: no section given and no OptionSettings line in the file", file=sys.stderr)
+                return False
         original = {}
         _, found = _find_option_line(lines, header)
         body = _option_settings_body(lines[found]) if found is not None else None

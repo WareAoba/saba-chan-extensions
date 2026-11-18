@@ -1227,3 +1227,55 @@ def test_check_update_reports_the_exit_code_when_steamcmd_dies(tmp_path, monkeyp
     assert result["reason"] == "check_failed"
     assert "0xC00000FD" in result["error"]
     assert "public" not in result["error"]
+
+
+def test_check_update_reads_the_buildid_even_when_steamcmd_exits_after_a_self_update(tmp_path, monkeypatch):
+    """SteamCMD가 스스로 업데이트하고 코드 7로 끝나도 앱 정보를 출력했으면 그 빌드 번호로 확인한다."""
+    exe = tmp_path / "steamcmd.exe"
+    exe.write_text("")
+
+    def fake_run(args, **kwargs):
+        class R:
+            returncode = 7
+            stdout = "[----] Update complete, launching...\nbranches\n  public\n    buildid: 200\n"
+        return R()
+
+    monkeypatch.setattr(steamcmd_mod.subprocess, "run", fake_run)
+    result = SteamCMD(explicit_path=str(exe)).check_update(app_id=2394010, install_dir=str(tmp_path))
+    assert result["remote_buildid"] == "200"
+    assert "reason" not in result
+
+
+def test_processes_bootstrapping_together_download_once(tmp_path):
+    """데몬은 설치 여러 개를 각각의 Python으로 함께 돌린다. 같은 포터블 폴더에 함께 받아 풀지 않고,
+    기다린 쪽은 먼저 받은 쪽이 풀어 둔 SteamCMD를 쓴다."""
+    import daemon_rcon
+    log = tmp_path / "downloads.log"
+    script = tmp_path / "bootstrap.py"
+    script.write_text(f"""
+import importlib.util, io, tarfile, time
+spec = importlib.util.spec_from_file_location("steamcmd", {steamcmd_mod.__file__!r})
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+def fake_download(url, dest, *, timeout):
+    with open({str(log)!r}, "a") as f:
+        f.write("start\\n")
+    time.sleep(1)
+    with tarfile.open(dest, "w:gz") as tf:
+        tf.addfile(tarfile.TarInfo(mod._EXE_NAME), io.BytesIO(b""))
+    with open({str(log)!r}, "a") as f:
+        f.write("end\\n")
+
+mod._download_archive = fake_download
+steam = mod.SteamCMD()
+steam.ensure_available()
+print(steam.path)
+""", encoding="utf-8")
+    root = tmp_path / "root"
+    env = dict(os.environ, PYTHONPATH=os.path.dirname(daemon_rcon.__file__), SABA_EXTENSION_DATA_ROOT=str(root))
+    runs = [subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, text=True, env=env) for _ in range(2)]
+    paths = [run.communicate(timeout=60)[0].strip() for run in runs]
+    assert all(run.returncode == 0 for run in runs)
+    assert paths == [str(root / "steamcmd" / steamcmd_mod._EXE_NAME)] * 2
+    assert log.read_text().split() == ["start", "end"]

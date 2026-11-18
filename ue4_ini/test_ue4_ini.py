@@ -430,7 +430,25 @@ def test_read_and_write_use_the_section_the_caller_names(tmp_path):
     assert write_option_settings(str(ini), {"Port": "3"}, "/Script/B.Settings")
     assert parse_option_settings(str(ini), "/Script/B.Settings") == {"Port": "3"}
     assert parse_option_settings(str(ini), "[/Script/A.Settings]") == {"Port": "1"}
-    with pytest.raises(TypeError):
-        parse_option_settings(str(ini))
-    with pytest.raises(TypeError):
-        write_option_settings(str(ini), {"Port": "4"})
+
+
+def test_modules_that_pass_no_section_keep_working(tmp_path):
+    """섹션을 넘기지 않던 예전 모듈(Palworld 0.1.15 등)은 파일의 첫 OptionSettings 줄을 읽고, 그 줄이 있던 섹션에 쓴다."""
+    path = tmp_path / "Game.ini"
+    path.write_text("[/Script/Engine.Game]\nA=1\n[/Script/Some.Settings]\nOptionSettings=(Difficulty=2,ServerName=\"x\")\n",
+                    encoding="utf-8")
+
+    props = parse_option_settings(str(path))
+    assert props == {"Difficulty": "2", "ServerName": "x"}
+    assert write_option_settings(str(path), {**props, "Difficulty": "3"}, quoted_keys={"ServerName"}) is True
+    assert path.read_text(encoding="utf-8") == ("[/Script/Engine.Game]\nA=1\n[/Script/Some.Settings]\n"
+                                                "OptionSettings=(Difficulty=3,ServerName=\"x\")\n")
+
+
+def test_a_write_without_a_section_is_refused_when_the_file_names_none(tmp_path):
+    """섹션을 모르면 지어내지 않는다: OptionSettings 줄이 없는 파일에 섹션 없이 쓰면 거절한다."""
+    path = tmp_path / "Game.ini"
+    path.write_text("[/Script/Engine.Game]\nA=1\n", encoding="utf-8")
+
+    assert write_option_settings(str(path), {"Difficulty": "3"}) is False
+    assert path.read_text(encoding="utf-8") == "[/Script/Engine.Game]\nA=1\n"

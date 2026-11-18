@@ -17,6 +17,7 @@ Daemon hook (server.check_update):
 
 from __future__ import annotations
 
+import contextlib
 import os
 import platform
 import re
@@ -169,6 +170,38 @@ def _portable_dir() -> Path:
     데몬이 준 ``SABA_EXTENSION_DATA_ROOT/steamcmd`` (격리된 실행은 구성요소마다 다른 뿌리를 받는다).
     """
     return extension_data_dir(_PORTABLE_SUBDIR)
+
+
+@contextlib.contextmanager
+def _bootstrap_lock(deadline: float):
+    """포터블 SteamCMD 받기·풀기를 프로세스 사이에서 한 번에 하나씩 한다.
+
+    데몬은 설치 여러 개를 각각의 Python으로 함께 돌리고, 모두 같은 포터블 폴더에 받는다.
+    *deadline* (``time.monotonic``)까지 잡지 못하면 ``TimeoutError``. 잠금은 프로세스가 끝나면 OS가 푼다.
+    """
+    portable = _portable_dir()
+    portable.mkdir(parents=True, exist_ok=True)
+    with open(portable / ".saba.lock", "a+b") as handle:
+        while True:
+            try:
+                if _SYSTEM == "Windows":
+                    import msvcrt
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("another process is downloading SteamCMD") from None
+                time.sleep(0.5)
+        try:
+            yield
+        finally:
+            if _SYSTEM == "Windows":
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 _PROGRESS_LINE = re.compile(r"progress:\s*([\d.]+)\s*\((\d+)\s*/\s*(\d+)\)")
@@ -337,6 +370,22 @@ class SteamCMD:
             self._path = exe_path
             return
 
+        # 받기·풀기는 잠금 안에서 한다 (함께 도는 설치가 같은 폴더에 받아 푸는 중일 수 있다).
+        # 기다린 시간도 받기에 쓴 시간이다: 설치가 남은 시간에서 뺀다
+        started = time.monotonic()
+        try:
+            with _bootstrap_lock(started + timeout):
+                self._bootstrap(portable, exe_path, timeout)
+        finally:
+            self._bootstrap_secs += time.monotonic() - started
+
+    def _bootstrap(self, portable: Path, exe_path: Path, timeout: int) -> None:
+        """:meth:`ensure_available` 의 받기·풀기. 잠금을 잡고 부른다."""
+        # Perhaps downloaded in a previous session (or by another process while this one waited for the lock)
+        if exe_path.exists():
+            self._path = exe_path
+            return
+
         url = _STEAMCMD_URLS.get(_SYSTEM)
         if url is None:
             raise RuntimeError(f"No SteamCMD download URL for platform: {_SYSTEM}")
@@ -349,11 +398,7 @@ class SteamCMD:
         fd, archive = tempfile.mkstemp(prefix=".steamcmd-", suffix=".download", dir=portable.parent)
         os.close(fd)
         try:
-            started = time.monotonic()
-            try:
-                _download_archive(url, archive, timeout=timeout)
-            finally:
-                self._bootstrap_secs += time.monotonic() - started
+            _download_archive(url, archive, timeout=timeout)
             _log(f"Downloaded {os.path.getsize(archive) / 1_048_576:.1f} MB, extracting …")
             try:
                 safe_extract(archive, portable)
@@ -648,8 +693,8 @@ class SteamCMD:
     def _app_info_print(self, app_id: int) -> Optional[str]:
         """Run ``steamcmd +app_info_update 1 +app_info_print <appid> +quit``.
 
-        Returns the raw stdout text, or None on failure. SteamCMD가 0이 아닌 코드로 끝나면 ``SteamCMDFailed``
-        (자체 업데이트를 해도 명령을 마저 돌리고 0으로 끝난다. 0이 아니면 앱 정보를 받지 못한 것이다).
+        Returns the raw stdout text, or None on failure. SteamCMD가 0이 아닌 코드로 끝나고 출력에 빌드 번호도 없으면
+        ``SteamCMDFailed`` (자체 업데이트 뒤 코드 7로 끝나도 앱 정보를 출력했으면 그 출력을 쓴다).
         """
         if not self.available:
             return None
@@ -675,7 +720,7 @@ class SteamCMD:
         except Exception as e:
             _log(f"app_info_print failed: {e}")
             return None
-        if result.returncode != 0:
+        if result.returncode != 0 and "buildid" not in result.stdout:
             raise SteamCMDFailed(i18n.t("errors.failed", code=_exit_code(result.returncode), detail=_failure_detail(result.stdout)))
         return result.stdout
 
