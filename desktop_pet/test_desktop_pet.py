@@ -89,9 +89,9 @@ def test_every_sprite_strip_matches_its_scene():
 @needs_node
 def test_frames_are_slow_except_repair_and_sweeping():
     ms = run_node("console.log(JSON.stringify(Object.fromEntries(Object.entries(M.SCENES).map(([k, s]) => [k, s.ms]))))")
-    # 사용자 11-11: 한 칸 시간을 훨씬 느리게, 수리·빗자루질은 빼고 (그 전 시안: 쓰러짐 170, 요리 150, 완성 160, 잠 220, 깸 170)
+    # 한 칸 시간을 훨씬 느리게, 수리·빗자루질은 빼고 (그 전 시안: 쓰러짐 170, 요리 150, 완성 160, 잠 220, 깸 170)
     assert ms["repair"] == 150 and ms["sweeping"] == 130
-    # 사용자 11-11: 대기도 더 느리게 (그 전 240)
+    # 대기도 더 느리게 (그 전 240)
     assert ms["idle"] >= 360
     for name, before in {"collapse": 170, "cooking": 150, "served": 160, "sleeping": 220, "waking": 170}.items():
         assert ms[name] >= before * 1.5, name
@@ -233,7 +233,7 @@ def test_installing_cooks_and_then_serves_or_scratches_its_head():
 
 
 def test_bubbles_are_short_task_summaries_not_lines():
-    # 사용자 11-11: 대사가 아니라 할/한 일 요약만 (느낌표·말줄임표 없이)
+    # 대사가 아니라 할/한 일 요약만 (느낌표·말줄임표 없이)
     lines = flat(json.loads((HERE / "locales" / "ko.json").read_text(encoding="utf-8")))
     for key, text in lines.items():
         if key.startswith("bubble."):
@@ -242,7 +242,7 @@ def test_bubbles_are_short_task_summaries_not_lines():
 
 @needs_node
 def test_things_done_in_the_app_get_a_bubble_too():
-    # 사용자 11-12: 앱 안에서 직접 한 작업도 말풍선으로 (자동 재시작은 따로 '복구 완료'로 알린다)
+    # 앱 안에서 직접 한 작업도 말풍선으로 (자동 재시작은 따로 '복구 완료'로 알린다)
     r = run_node(
         SCENARIO
         + """
@@ -261,7 +261,7 @@ def test_things_done_in_the_app_get_a_bubble_too():
     assert r["app"]["vars"] == {"server": "야생", "who": {"source": "gui"}}
     assert r["discord"]["key"] == "bubble.started"
     assert r["discord"]["state"] == "done"
-    # 사용자 11-11: 첫 줄 한 일과 시킨 사람, 둘째 줄 시각과 장소(디스코드 서버) → 시킨 쪽과 말한 시각을 싣는다
+    # 첫 줄 한 일과 시킨 사람, 둘째 줄 시각과 장소(디스코드 서버) → 시킨 쪽과 말한 시각을 싣는다
     assert r["discord"]["vars"] == {"server": "팰", "who": {"user": "주인님", "source": "discord", "place": "사바쨩 서버"}}
     assert r["discord"]["at"] == 5000
     assert r["restart"] == []
@@ -269,7 +269,7 @@ def test_things_done_in_the_app_get_a_bubble_too():
 
 @needs_node
 def test_things_saba_chan_did_by_itself_show_as_auto():
-    # 사용자 11-17: 사람이 시킨 게 아니면(자동 정지·감시·예약·자동 업데이트·데몬) 출처는 모두 "자동"으로만
+    # 사람이 시킨 게 아니면(자동 정지·감시·예약·자동 업데이트·데몬) 출처는 모두 "자동"으로만
     r = run_node(
         SCENARIO
         + """
@@ -296,7 +296,7 @@ def test_every_language_names_the_auto_source():
 
 @needs_node
 def test_tasks_at_the_same_time_stack_with_finished_ones_on_top():
-    # 사용자 11-11: 여러 작업이 동시에 돌면 겹쳐 쌓고, 끝난 작업을 위로 끌어올린다
+    # 여러 작업이 동시에 돌면 겹쳐 쌓고, 끝난 작업을 위로 끌어올린다
     r = run_node(
         SCENARIO
         + """
@@ -325,7 +325,7 @@ def test_tasks_at_the_same_time_stack_with_finished_ones_on_top():
 
 @needs_node
 def test_idle_is_mostly_still_and_blinks_only_now_and_then():
-    # 사용자 11-11: 대기 중 눈을 너무 자주 깜빡인다. 정적인 칸 반복을 늘린다 (대기 줄의 2~4번 칸이 눈 감는 칸)
+    # 대기 중 눈을 너무 자주 깜빡인다. 정적인 칸 반복을 늘린다 (대기 줄의 2~4번 칸이 눈 감는 칸)
     r = run_node("console.log(JSON.stringify({ loop: M.SCENES.idle.loop, gap: M.BLINK_GAP }))")
     assert not {2, 3, 4} & set(r["loop"])
     assert r["gap"][0] >= 15000
@@ -333,7 +333,7 @@ def test_idle_is_mostly_still_and_blinks_only_now_and_then():
 
 @needs_node
 def test_quick_results_fade_fast_and_long_waits_or_failures_stay_until_closed():
-    # 사용자 11-11: 단순 명령 완료는 금방 지우고, 설치 완료처럼 오래 기다린 일은 사용자가 지울 때까지 둔다.
+    # 단순 명령 완료는 금방 지우고, 설치 완료처럼 오래 기다린 일은 사용자가 지울 때까지 둔다.
     # 말풍선을 누르면 앱의 그 화면으로 간다 (target)
     r = run_node(
         SCENARIO
@@ -368,7 +368,7 @@ def test_quick_results_fade_fast_and_long_waits_or_failures_stay_until_closed():
 
 @needs_node
 def test_working_dots_blink_in_the_colour_of_the_state_being_left():
-    # 사용자 11-11 (앱 전체 규칙): 진행 중 점은 떠나는 상태의 색으로 깜빡인다. 정지에서 시작 = 회색, 켜진 것을 끄기 = 초록,
+    # 앱 전체 규칙: 진행 중 점은 떠나는 상태의 색으로 깜빡인다. 정지에서 시작 = 회색, 켜진 것을 끄기 = 초록,
     # 복구(크래시 뒤 다시 켜기 등 잠깐 끊김) = 노랑
     r = run_node(
         SCENARIO
