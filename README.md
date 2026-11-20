@@ -52,7 +52,7 @@
 
 ## 검사와 발행
 
-- 테스트는 저장소 루트에서 `pytest`로 돌려요. PR을 열면 `CI` 액션이 Windows에서 ruff 치명 규칙과 pytest를 돌리고, Actions 탭에서 직접 돌리면 Ubuntu까지 해요.
+- 테스트는 저장소 루트에서 `pytest`로 돌려요. PR을 열면 `CI` 액션이 Windows에서 ruff 치명 규칙과 pytest, 그리고 이 익스텐션으로 모듈 저장소 시험(적합성·단위 테스트)을 돌리고, Actions 탭에서 직접 돌리면 Ubuntu까지 해요.
 - 익스텐션을 고쳐서 내보낼 때는 `manifest.json`의 `version`을 올리고 `main`에 병합해요. 그 버전을 꼭 써야 하는 모듈은 `module.toml` `[module.dependencies]`에 `ext-<id> = ">=버전"`으로 적어요.
 - 이 저장소에는 따로 발행하는 액션이 없어요. 사바쨩 앱을 발행할 때 사바쨩 저장소의 발행 액션이 이 저장소의 `main`을 받아 익스텐션마다 `ext-<id>.zip`을 만들고, 앱과 같은 릴리스 목록에 서명해서 올려요.
 
